@@ -3,15 +3,11 @@ import { RouterModule, Routes } from '@angular/router';
 import { AuthGuard } from './core/guards/auth.guard';
 
 const routes: Routes = [
-  { path: '', redirectTo: '/dashboard', pathMatch: 'full' },
+  { path: '', redirectTo: '/banks', pathMatch: 'full' },
   {
-    path: 'login',
-    loadChildren: () => import('./features/auth/auth.module').then(m => m.AuthModule),
-  },
-  {
-    path: 'dashboard',
+    path: 'banks',
     canActivate: [AuthGuard],
-    loadChildren: () => import('./features/dashboard/dashboard.module').then(m => m.DashboardModule),
+    loadChildren: () => import('./features/banks/banks.module').then(m => m.BanksModule),
   },
   {
     path: 'cfdis',
@@ -19,16 +15,16 @@ const routes: Routes = [
     loadChildren: () => import('./features/cfdis/cfdis.module').then(m => m.CfdisModule),
   },
   {
-    path: 'comparisons',
+    path: 'account-plan',
     canActivate: [AuthGuard],
-    loadChildren: () => import('./features/comparisons/comparisons.module').then(m => m.ComparisonsModule),
+    loadChildren: () => import('./features/account-plan/account-plan.module').then(m => m.AccountPlanModule),
   },
   {
-    path: 'discrepancies',
+    path: 'collection-requests',
     canActivate: [AuthGuard],
-    loadChildren: () => import('./features/discrepancies/discrepancies.module').then(m => m.DiscrepanciesModule),
+    loadChildren: () => import('./features/collection-requests/collection-request.module').then(m => m.CollectionRequestModule),
   },
-  { path: '**', redirectTo: '/login' },
+  { path: '**', redirectTo: '/banks' },
 ];
 
 @NgModule({

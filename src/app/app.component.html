@@ -6,7 +6,7 @@
       <!-- Brand + toggle -->
       <div class="sidebar-brand">
         <div *ngIf="!sidebarCollapsed" class="sidebar-brand-name">CFDI Comparator</div>
-        <div *ngIf="!sidebarCollapsed" class="sidebar-brand-sub">ERP vs SAT</div>
+        <div *ngIf="!sidebarCollapsed" class="sidebar-brand-sub">Sistema contable</div>
         <button (click)="toggleSidebar()" class="sidebar-toggle" [title]="sidebarCollapsed ? 'Expandir' : 'Colapsar'">
           {{ sidebarCollapsed ? '›' : '‹' }}
         </button>
@@ -15,33 +15,33 @@
       <!-- Navigation -->
       <div class="sidebar-nav">
         <div *ngIf="!sidebarCollapsed" class="sidebar-section">Principal</div>
-        <a routerLink="/dashboard" routerLinkActive="active" [title]="sidebarCollapsed ? 'Dashboard' : ''">
-          <span class="sidebar-icon">▦</span>
-          <span *ngIf="!sidebarCollapsed">Dashboard</span>
-        </a>
         <a routerLink="/cfdis" routerLinkActive="active" [title]="sidebarCollapsed ? 'CFDIs' : ''">
           <span class="sidebar-icon">⊡</span>
           <span *ngIf="!sidebarCollapsed">CFDIs</span>
         </a>
-
-        <div *ngIf="!sidebarCollapsed" class="sidebar-section">Análisis</div>
-        <a routerLink="/comparisons" routerLinkActive="active" [title]="sidebarCollapsed ? 'Comparaciones' : ''">
-          <span class="sidebar-icon">⇄</span>
-          <span *ngIf="!sidebarCollapsed">Comparaciones</span>
+        <a routerLink="/banks" routerLinkActive="active" [title]="sidebarCollapsed ? 'Bancos' : ''">
+          <span class="sidebar-icon">₿</span>
+          <span *ngIf="!sidebarCollapsed">Bancos</span>
         </a>
-        <a routerLink="/discrepancies" routerLinkActive="active" [title]="sidebarCollapsed ? 'Discrepancias' : ''">
-          <span class="sidebar-icon">△</span>
-          <span *ngIf="!sidebarCollapsed">Discrepancias</span>
+        <a routerLink="/collection-requests" routerLinkActive="active" [title]="sidebarCollapsed ? 'Solicitudes de Cobro' : ''">
+          <span class="sidebar-icon">📷</span>
+          <span *ngIf="!sidebarCollapsed">Solicitudes de Cobro</span>
+        </a>
+
+        <div *ngIf="!sidebarCollapsed" class="sidebar-section">Contabilidad</div>
+        <a routerLink="/account-plan" routerLinkActive="active" [title]="sidebarCollapsed ? 'Catálogo de Cuentas' : ''">
+          <span class="sidebar-icon">📒</span>
+          <span *ngIf="!sidebarCollapsed">Catálogo de Cuentas</span>
         </a>
       </div>
 
       <!-- Footer -->
       <div class="sidebar-footer" *ngIf="!sidebarCollapsed">
         <div class="sidebar-user">
-          <div class="sidebar-avatar">{{ (auth.currentUser?.email || 'U')[0].toUpperCase() }}</div>
+          <div class="sidebar-avatar">{{ auth.currentUser.name[0].toUpperCase() }}</div>
           <div>
-            <div class="sidebar-user-name">{{ (auth.currentUser?.email || 'usuario@').split('@')[0] }}</div>
-            <div class="sidebar-user-role">{{ auth.currentUser?.role || 'admin' }}</div>
+            <div class="sidebar-user-name">{{ auth.currentUser.name }}</div>
+            <div class="sidebar-user-role">{{ auth.currentUser.role }}</div>
           </div>
         </div>
         <button (click)="logout()" class="btn btn-ghost btn-sm w-full"

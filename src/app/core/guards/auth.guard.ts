@@ -1,14 +1,15 @@
 import { Injectable } from '@angular/core';
-import { CanActivate, Router } from '@angular/router';
-import { AuthService } from '../services/auth.service';
+import { CanActivate } from '@angular/router';
 
+/**
+ * AuthGuard — STUB para desarrollo.
+ *
+ * Siempre permite la navegación. Para restaurar protección real,
+ * verificar AuthService.isAuthenticated y redirigir a /login si false.
+ */
 @Injectable({ providedIn: 'root' })
 export class AuthGuard implements CanActivate {
-  constructor(private auth: AuthService, private router: Router) {}
-
   canActivate(): boolean {
-    if (this.auth.isAuthenticated) return true;
-    this.router.navigate(['/login']);
-    return false;
+    return true; // STUB: siempre permite
   }
 }

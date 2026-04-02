@@ -1,0 +1,1176 @@
+<div class="bk-page">
+
+  <!-- ══ VISTA: TARJETAS ══════════════════════════════════════════════════════ -->
+  <ng-container *ngIf="view === 'cards'">
+
+    <!-- Header tarjetas -->
+    <div class="bk-header">
+      <div>
+        <h1 class="bk-title">Bancos</h1>
+        <p class="bk-subtitle">Selecciona un banco para ver sus movimientos</p>
+      </div>
+      <button class="btn-import-dark" (click)="openImportModal()">
+        <svg width="14" height="14" viewBox="0 0 20 20" fill="none"
+             stroke="currentColor" stroke-width="2.2">
+          <path d="M10 3v11M5 9l5-6 5 6"/><path d="M3 17h14"/>
+        </svg>
+        Importar movimientos
+      </button>
+    </div>
+
+    <!-- Loading -->
+    <div *ngIf="cardsLoading" class="cards-loading">
+      <div class="spinner"></div>
+    </div>
+
+    <!-- Sin datos aún -->
+    <div *ngIf="!cardsLoading && bankCards.length === 0" class="cards-empty">
+      <div class="cards-empty-icon">🏦</div>
+      <div class="cards-empty-title">Sin movimientos importados</div>
+      <div class="cards-empty-sub">Importa un estado de cuenta Excel para comenzar</div>
+      <button class="btn-import mt-3" (click)="openImportModal()">Importar movimientos</button>
+    </div>
+
+    <!-- Grid de tarjetas -->
+    <div *ngIf="!cardsLoading && bankCards.length > 0" class="cards-grid">
+      <div class="bank-card" *ngFor="let card of bankCards"
+           (click)="openBank(card.banco)"
+           [style.--accent]="bancoAccent[card.banco] || '#334155'"
+           [style.--light]="bancoLight[card.banco] || '#f8fafc'">
+
+        <!-- Fila superior: pill banco + recency -->
+        <div class="card-toprow">
+          <span class="banco-pill"
+                [style.background]="bancoLight[card.banco]"
+                [style.color]="bancoAccent[card.banco]">
+            {{ card.banco }}
+          </span>
+          <div class="recency-wrap">
+            <span class="recency-dot" [ngClass]="recencyClass(card.ultimaImport)"></span>
+            <span class="recency-label">{{ formatRecency(card.ultimaImport) }}</span>
+          </div>
+        </div>
+
+        <!-- Número de cuenta (enmascarado) -->
+        <div class="card-account">
+          <span class="account-dots">●●●●</span>
+          <span class="account-num">{{ card.numeroCuenta || '————' }}</span>
+        </div>
+
+        <!-- Dos cajas de métricas -->
+        <div class="card-stats">
+          <div class="stat-box">
+            <span class="stat-label">Depósitos</span>
+            <span class="stat-val stat-dep">{{ card.totalDepositos | currency:'MXN':'symbol':'1.0-0' }}</span>
+          </div>
+          <div class="stat-box">
+            <span class="stat-label">Retiros</span>
+            <span class="stat-val stat-ret">{{ card.totalRetiros | currency:'MXN':'symbol':'1.0-0' }}</span>
+          </div>
+        </div>
+
+        <!-- Desglose por status -->
+        <div class="card-status-row">
+          <span class="status-mini">
+            <span class="status-dot dot-pending"></span>
+            {{ card.porStatus.no_identificado | number }}
+          </span>
+          <span class="status-mini">
+            <span class="status-dot dot-done"></span>
+            {{ card.porStatus.identificado | number }}
+          </span>
+          <span class="status-mini">
+            <span class="status-dot dot-other"></span>
+            {{ card.porStatus.otros | number }}
+          </span>
+        </div>
+
+        <!-- Cuenta contable (si hay) -->
+        <div class="card-cuenta" *ngIf="card.cuentaContable">
+          <svg width="11" height="11" viewBox="0 0 20 20" fill="none"
+               stroke="currentColor" stroke-width="2">
+            <path d="M4 6h12M4 10h8M4 14h6"/>
+          </svg>
+          {{ card.cuentaContable }}
+        </div>
+
+        <!-- Footer -->
+        <div class="card-footer">
+          <div class="card-footer-left">
+            <span class="movs-count">{{ card.movimientos | number }} movimientos</span>
+            <button class="btn-cuenta" (click)="openCuentaModal(card, $event)"
+                    [title]="card.cuentaContable ? 'Editar cuenta contable' : 'Vincular cuenta contable'">
+              <svg width="12" height="12" viewBox="0 0 20 20" fill="none"
+                   stroke="currentColor" stroke-width="2.2">
+                <path d="M4 5h12M4 10h8M4 15h5"/>
+              </svg>
+              {{ card.cuentaContable ? 'Cuenta: ' + card.cuentaContable : 'Cuenta contable' }}
+            </button>
+          </div>
+          <svg class="arrow-icon" width="16" height="16" viewBox="0 0 20 20" fill="none"
+               stroke="currentColor" stroke-width="2.2">
+            <path d="M7 4l6 6-6 6"/>
+          </svg>
+        </div>
+
+      </div>
+    </div>
+
+  </ng-container>
+
+  <!-- ══ VISTA: DETALLE DEL BANCO ══════════════════════════════════════════════ -->
+  <ng-container *ngIf="view === 'detail'">
+
+    <!-- Header detalle -->
+    <div class="detail-header">
+      <div class="detail-header-left">
+        <button class="back-btn" (click)="goBack()">
+          <svg width="14" height="14" viewBox="0 0 20 20" fill="none"
+               stroke="currentColor" stroke-width="2.5">
+            <path d="M13 4l-6 6 6 6"/>
+          </svg>
+          Volver
+        </button>
+        <span class="banco-pill detail-pill"
+              [style.background]="bancoLight[activeBanco!]"
+              [style.color]="bancoAccent[activeBanco!]">
+          {{ activeBanco }}
+        </span>
+        <div class="detail-bank-info">
+          <span class="detail-bank-name">{{ activeBanco }}</span>
+          <span class="detail-meta-sep">·</span>
+          <span class="account-dots-sm">●●●●</span>
+          <span class="detail-account">{{ activeCard?.numeroCuenta || '————' }}</span>
+          <span class="detail-meta-sep">·</span>
+          <span class="detail-recency">
+            <span class="recency-dot" [ngClass]="recencyClass(activeCard?.ultimaImport ?? null)"></span>
+            {{ formatRecency(activeCard?.ultimaImport ?? null) }}
+          </span>
+        </div>
+      </div>
+      <button class="btn-import-dark" (click)="openImportModal()">
+        <svg width="14" height="14" viewBox="0 0 20 20" fill="none"
+             stroke="currentColor" stroke-width="2.2">
+          <path d="M10 3v11M5 9l5-6 5 6"/><path d="M3 17h14"/>
+        </svg>
+        Importar movimientos
+      </button>
+    </div>
+
+    <!-- Stats bar -->
+    <div class="stats-bar" *ngIf="activeCard">
+      <div class="stats-card">
+        <span class="stats-label">Depósitos</span>
+        <span class="stats-val stats-dep">{{ activeCard.totalDepositos | currency:'MXN':'symbol':'1.0-0' }}</span>
+      </div>
+      <div class="stats-card">
+        <span class="stats-label">Retiros</span>
+        <span class="stats-val stats-ret">{{ activeCard.totalRetiros | currency:'MXN':'symbol':'1.0-0' }}</span>
+      </div>
+      <div class="stats-card">
+        <span class="stats-label">Total movimientos</span>
+        <span class="stats-val">{{ activeCard.movimientos | number }}</span>
+      </div>
+    </div>
+
+    <!-- Panel de movimientos -->
+    <div class="mov-panel">
+
+      <!-- Cabecera del panel -->
+      <div class="mov-panel-header">
+        <div class="mov-panel-title">
+          <span class="mov-panel-name">Movimientos</span>
+          <span class="mov-panel-count">{{ pagination.total | number }} registros</span>
+        </div>
+      </div>
+
+      <!-- Barra de filtros -->
+      <div class="filter-bar" [formGroup]="filterForm">
+        <div class="search-wrap">
+          <svg class="search-ico" viewBox="0 0 20 20" fill="none"
+               stroke="#9ca3af" stroke-width="1.8" width="15" height="15">
+            <circle cx="9" cy="9" r="6"/><path d="M15 15l-3.5-3.5"/>
+          </svg>
+          <input formControlName="search" class="search-inp"
+                 placeholder="Buscar por concepto, ID, monto, UUID, fecha (dd/mm/aaaa)…">
+          <button *ngIf="filterForm.get('search')!.value"
+                  class="search-clear" (click)="filterForm.get('search')!.setValue('')">✕</button>
+        </div>
+
+        <select class="filter-sel" [(ngModel)]="activeStatus" [ngModelOptions]="{standalone:true}"
+                (ngModelChange)="loadMovements(1)">
+          <option value="">Todos los estados</option>
+          <option value="no_identificado">No identificado</option>
+          <option value="identificado">Identificado</option>
+          <option value="otros">Otros</option>
+        </select>
+
+        <select class="filter-sel" [(ngModel)]="activeCategoria" [ngModelOptions]="{standalone:true}"
+                (ngModelChange)="loadMovements(1)">
+          <option value="">Todas las categorías</option>
+          <option *ngFor="let cat of categorias" [value]="cat">{{ cat }}</option>
+        </select>
+
+        <select formControlName="tipo" class="filter-sel">
+          <option value="">Dep. y retiros</option>
+          <option value="deposito">Solo depósitos</option>
+          <option value="retiro">Solo retiros</option>
+        </select>
+
+        <button *ngIf="hasActiveFilters()" class="btn-clear" (click)="clearFilters()">
+          Limpiar
+        </button>
+      </div>
+
+      <!-- Tabla -->
+      <div class="mov-table-wrap">
+
+        <div *ngIf="loading" class="table-loading">
+          <div class="spinner"></div>
+          <span>Cargando…</span>
+        </div>
+
+        <table *ngIf="!loading" class="mov-table">
+          <thead>
+            <tr>
+              <th class="th-id">ID</th>
+              <th class="th-sort" (click)="sort('fecha')" [class.th-active]="isActiveSort('fecha')">
+                Fecha <span class="sort-ico">{{ sortIcon('fecha') }}</span>
+              </th>
+              <th class="th-concepto">Concepto</th>
+              <th class="th-sort th-right" (click)="sort('deposito')" [class.th-active]="isActiveSort('deposito')">
+                Depósito <span class="sort-ico">{{ sortIcon('deposito') }}</span>
+              </th>
+              <th class="th-sort th-right" (click)="sort('retiro')" [class.th-active]="isActiveSort('retiro')">
+                Retiro <span class="sort-ico">{{ sortIcon('retiro') }}</span>
+              </th>
+              <th>Categoría</th>
+              <th>Estado</th>
+              <th>UUID CFDI</th>
+              <th>IDs ERP</th>
+              <th class="th-right">Autorización</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let m of movements" [class.row-locked]="!!m.uuidXML">
+
+              <td class="td-id">
+                <span *ngIf="m.folio" class="folio-chip">{{ m.folio }}</span>
+                <span *ngIf="!m.folio" class="td-dash">—</span>
+              </td>
+
+              <td class="td-date">{{ m.fecha | date:'dd/MM/yyyy' }}</td>
+
+              <td class="td-concepto" [title]="m.concepto">
+                <span class="concepto-text">{{ m.concepto }}</span>
+              </td>
+
+              <td class="td-right">
+                <span *ngIf="m.deposito" class="amount-dep">
+                  {{ m.deposito | currency:'MXN':'symbol':'1.2-2' }}
+                </span>
+                <span *ngIf="!m.deposito" class="td-dash">—</span>
+              </td>
+
+              <td class="td-right">
+                <span *ngIf="m.retiro" class="amount-ret">
+                  {{ m.retiro | currency:'MXN':'symbol':'1.2-2' }}
+                </span>
+                <span *ngIf="!m.retiro" class="td-dash">—</span>
+              </td>
+
+              <td>
+                <span *ngIf="m.categoria" class="cat-chip"
+                      [style.background]="catColor(m.categoria).bg"
+                      [style.color]="catColor(m.categoria).color">
+                  {{ m.categoria }}
+                </span>
+                <span *ngIf="!m.categoria" class="td-dash">—</span>
+              </td>
+
+              <td>
+                <button class="status-pill" [ngClass]="statusClass(m.status)"
+                        [class.pill-locked]="!!m.uuidXML"
+                        (click)="cycleStatus(m)"
+                        [title]="m.uuidXML ? 'Bloqueado: UUID vinculado' : 'Click para cambiar estado'">
+                  <svg *ngIf="m.uuidXML" width="8" height="8" viewBox="0 0 20 20" fill="none"
+                       stroke="currentColor" stroke-width="2.5" style="flex-shrink:0">
+                    <rect x="5" y="9" width="10" height="9" rx="2"/>
+                    <path d="M7 9V6a3 3 0 016 0v3"/>
+                  </svg>
+                  {{ statusLabel(m.status) }}
+                </button>
+              </td>
+
+              <td class="td-uuid">
+                <span *ngIf="m.uuidXML" class="uuid-chip" [title]="m.uuidXML">
+                  {{ m.uuidXML | slice:0:8 }}…
+                </span>
+                <button *ngIf="!m.uuidXML" class="btn-uuid-link"
+                        (click)="openUuidModal(m, $event)"
+                        title="Vincular CFDI">
+                  <svg width="11" height="11" viewBox="0 0 20 20" fill="none"
+                       stroke="currentColor" stroke-width="2.2">
+                    <path d="M10 13H7a4 4 0 010-8h3M10 7h3a4 4 0 010 8h-3M8 10h4"/>
+                  </svg>
+                  Vincular
+                </button>
+              </td>
+
+              <!-- IDs ERP -->
+              <td class="td-erp">
+                <div class="erp-ids-wrap">
+                  <ng-container *ngFor="let eid of (m.erpIds || [])">
+                    <span class="erp-chip">
+                      {{ eid }}
+                      <button class="erp-chip-rm" (click)="removeErpId(m, eid, $event)" title="Quitar">×</button>
+                    </span>
+                  </ng-container>
+                  <button class="btn-erp-add" (click)="openErpModal(m, $event)" title="Agregar ID ERP">
+                    <svg width="10" height="10" viewBox="0 0 20 20" fill="none"
+                         stroke="currentColor" stroke-width="2.8">
+                      <path d="M10 4v12M4 10h12"/>
+                    </svg>
+                  </button>
+                </div>
+              </td>
+
+              <td class="td-right td-auth">{{ m.numeroAutorizacion || '—' }}</td>
+
+            </tr>
+
+            <tr *ngIf="movements.length === 0">
+              <td colspan="10">
+                <div class="empty-state">
+                  <div class="empty-icon">🔍</div>
+                  <div class="empty-title">Sin resultados</div>
+                  <div class="empty-sub">
+                    {{ hasActiveFilters() ? 'Ningún movimiento coincide con los filtros' : 'No hay movimientos para este banco' }}
+                  </div>
+                  <button *ngIf="hasActiveFilters()" class="btn-clear mt-2" (click)="clearFilters()">
+                    Limpiar filtros
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Paginación -->
+      <div class="pag-bar" *ngIf="!loading && pagination.pages > 1">
+        <button class="pag-btn pag-nav"
+                [disabled]="pagination.page <= 1"
+                (click)="changePage(pagination.page - 1)">‹</button>
+
+        <ng-container *ngFor="let p of pageNumbers()">
+          <span *ngIf="p === -1" class="pag-gap">…</span>
+          <button *ngIf="p !== -1"
+                  class="pag-btn"
+                  [class.pag-current]="pagination.page === p"
+                  (click)="changePage(p)">{{ p }}</button>
+        </ng-container>
+
+        <button class="pag-btn pag-nav"
+                [disabled]="pagination.page >= pagination.pages"
+                (click)="changePage(pagination.page + 1)">›</button>
+
+        <span class="pag-info">
+          {{ (pagination.page - 1) * pagination.limit + 1 }}–{{ min(pagination.page * pagination.limit, pagination.total) }}
+          de {{ pagination.total | number }}
+        </span>
+      </div>
+
+    </div><!-- /mov-panel -->
+
+  </ng-container>
+
+</div>
+
+<!-- ══ MODAL: IMPORTAR MOVIMIENTOS ══════════════════════════════════════════ -->
+<div *ngIf="showImportModal" class="modal-backdrop" (click)="closeImportModal()">
+  <div class="modal-box" (click)="$event.stopPropagation()">
+
+    <div class="modal-head">
+      <div>
+        <div class="modal-title">Importar movimientos</div>
+        <div class="modal-sub">Excel (.xlsx / .xls) con estado de cuenta bancario</div>
+      </div>
+      <button class="modal-close" (click)="closeImportModal()">✕</button>
+    </div>
+
+    <div class="modal-body">
+      <div class="field-label">Banco de los movimientos</div>
+      <div class="bank-pills">
+        <button *ngFor="let b of bancos"
+                class="bank-pill"
+                [class.active]="importBanco === b"
+                [style.--bc]="bancoAccent[b]"
+                (click)="importBanco = b">
+          {{ b }}
+        </button>
+        <button class="bank-pill"
+                [class.active]="importBanco === ''"
+                (click)="importBanco = ''">
+          Auto-detectar
+        </button>
+      </div>
+
+      <label class="dropzone"
+             [class.drag-over]="isDragging"
+             [class.has-file]="selectedFile"
+             (dragover)="onDragOver($event)"
+             (dragleave)="onDragLeave()"
+             (drop)="onDrop($event)">
+        <input type="file" accept=".xlsx,.xls" style="display:none"
+               (change)="onFileSelected($event)">
+
+        <ng-container *ngIf="!selectedFile">
+          <svg viewBox="0 0 48 48" fill="none" stroke="#9ca3af" stroke-width="2"
+               width="44" height="44">
+            <rect x="8" y="4" width="32" height="40" rx="4"/>
+            <path d="M16 14h16M16 20h16M16 26h10"/>
+            <path d="M30 32l4 4 8-8" stroke="#16a34a" stroke-width="2.5"/>
+          </svg>
+          <div class="drop-label">Arrastra aquí o haz clic para seleccionar</div>
+          <div class="drop-hint">.xlsx · .xls</div>
+        </ng-container>
+
+        <ng-container *ngIf="selectedFile">
+          <svg viewBox="0 0 48 48" fill="none" stroke="#15803d" stroke-width="2"
+               width="36" height="36">
+            <rect x="8" y="4" width="32" height="40" rx="4"/>
+            <path d="M16 18h16M16 24h10"/>
+          </svg>
+          <div class="drop-file-name">{{ selectedFile.name }}</div>
+          <div class="drop-hint">
+            {{ (selectedFile.size / 1024).toFixed(0) }} KB ·
+            <span style="color:#6366f1">Cambiar archivo</span>
+          </div>
+        </ng-container>
+      </label>
+
+      <div *ngIf="uploadResult" class="import-result success">
+        <svg width="18" height="18" viewBox="0 0 20 20" fill="none"
+             stroke="#15803d" stroke-width="2.2">
+          <circle cx="10" cy="10" r="9"/><path d="M6 10l3 3 5-5"/>
+        </svg>
+        <div>
+          <strong>{{ uploadResult.importados }}</strong> movimientos importados
+          <span *ngIf="uploadResult.duplicados > 0" class="result-dup">
+            · {{ uploadResult.duplicados }} ya existían
+          </span>
+          <div class="result-chips" *ngIf="uploadResult.resumen">
+            <span *ngFor="let e of uploadResult.resumen | keyvalue"
+                  class="result-chip">{{ e.key }}: {{ e.value }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div *ngIf="uploadError" class="import-result error">
+        <svg width="18" height="18" viewBox="0 0 20 20" fill="none"
+             stroke="#b91c1c" stroke-width="2.2">
+          <circle cx="10" cy="10" r="9"/><path d="M10 6v4M10 14h.01"/>
+        </svg>
+        {{ uploadError }}
+      </div>
+    </div>
+
+    <div class="modal-foot">
+      <button class="btn-ghost" (click)="closeImportModal()">Cancelar</button>
+      <button class="btn-import" [disabled]="!selectedFile || uploading" (click)="uploadExcel()">
+        <svg *ngIf="!uploading" width="15" height="15" viewBox="0 0 20 20" fill="none"
+             stroke="currentColor" stroke-width="2.2">
+          <path d="M10 3v11M5 9l5-6 5 6"/><path d="M3 17h14"/>
+        </svg>
+        <div *ngIf="uploading" class="spinner spinner-sm"></div>
+        {{ uploading ? 'Procesando…' : 'Importar' }}
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: CUENTA CONTABLE ════════════════════════════════════════════════ -->
+<div *ngIf="showCuentaModal" class="modal-backdrop" (click)="closeCuentaModal()">
+  <div class="modal-box modal-sm" (click)="$event.stopPropagation()">
+
+    <div class="modal-head">
+      <div>
+        <div class="modal-title">Cuenta contable · {{ cuentaModalCard?.banco }}</div>
+        <div class="modal-sub">Vincula la cuenta del catálogo</div>
+      </div>
+      <button class="modal-close" (click)="closeCuentaModal()">✕</button>
+    </div>
+
+    <div class="modal-body">
+      <div class="form-field">
+        <label class="form-label">Número de cuenta bancaria</label>
+        <input class="form-input" type="text" [(ngModel)]="numeroCuentaInput"
+               placeholder="ej. 1234, CLABE, últimos 4 dígitos…">
+      </div>
+      <div class="form-field">
+        <label class="form-label">Cuenta contable (catálogo)</label>
+        <input class="form-input" type="text" [(ngModel)]="cuentaInput"
+               placeholder="ej. 1020.001.001">
+        <span class="form-hint">El catálogo de cuentas estará disponible próximamente</span>
+      </div>
+    </div>
+
+    <div class="modal-foot">
+      <button class="btn-ghost" (click)="closeCuentaModal()">Cancelar</button>
+      <button class="btn-import" [disabled]="savingCuenta" (click)="saveCuenta()">
+        <div *ngIf="savingCuenta" class="spinner spinner-sm"></div>
+        {{ savingCuenta ? 'Guardando…' : 'Guardar' }}
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: VINCULAR UUID CFDI ════════════════════════════════════════════ -->
+<div *ngIf="showUuidModal" class="modal-backdrop" (click)="closeUuidModal()">
+  <div class="modal-box modal-sm" (click)="$event.stopPropagation()">
+
+    <div class="modal-head">
+      <div>
+        <div class="modal-title">Vincular UUID CFDI</div>
+        <div class="modal-sub" *ngIf="uuidModalMovement">
+          {{ uuidModalMovement.fecha | date:'dd/MM/yyyy' }} ·
+          {{ (uuidModalMovement.deposito ?? uuidModalMovement.retiro) | currency:'MXN':'symbol':'1.2-2' }}
+        </div>
+      </div>
+      <button class="modal-close" (click)="closeUuidModal()">✕</button>
+    </div>
+
+    <div class="modal-body">
+      <div class="uuid-mov-info" *ngIf="uuidModalMovement">
+        <span class="uuid-mov-concepto">{{ uuidModalMovement.concepto }}</span>
+      </div>
+
+      <div class="form-field">
+        <label class="form-label">UUID del CFDI</label>
+        <input class="form-input form-mono" type="text" [(ngModel)]="uuidInput"
+               placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+               (keydown.enter)="confirmUuid()">
+      </div>
+
+      <!-- Aviso: vinculación es permanente -->
+      <div class="uuid-warning">
+        <svg width="14" height="14" viewBox="0 0 20 20" fill="none"
+             stroke="#b45309" stroke-width="2">
+          <path d="M10 2L2 17h16L10 2z"/><path d="M10 9v4M10 14.5h.01"/>
+        </svg>
+        Al vincular, el movimiento se marcará como <strong>Identificado</strong>
+        y el estado no podrá modificarse.
+      </div>
+
+      <div *ngIf="uuidError" class="import-result error" style="margin-top:0">
+        <svg width="16" height="16" viewBox="0 0 20 20" fill="none"
+             stroke="#b91c1c" stroke-width="2.2">
+          <circle cx="10" cy="10" r="9"/><path d="M10 6v4M10 14h.01"/>
+        </svg>
+        {{ uuidError }}
+      </div>
+    </div>
+
+    <div class="modal-foot">
+      <button class="btn-ghost" (click)="closeUuidModal()">Cancelar</button>
+      <button class="btn-import"
+              [disabled]="!uuidInput.trim() || savingUuid"
+              (click)="confirmUuid()">
+        <div *ngIf="savingUuid" class="spinner spinner-sm"></div>
+        {{ savingUuid ? 'Vinculando…' : 'Vincular' }}
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: IDs ERP ════════════════════════════════════════════════════════ -->
+<div *ngIf="showErpModal" class="modal-backdrop" (click)="closeErpModal()">
+  <div class="modal-box modal-sm" (click)="$event.stopPropagation()">
+
+    <div class="modal-head">
+      <div>
+        <div class="modal-title">IDs del ERP</div>
+        <div class="modal-sub" *ngIf="erpModalMovement">
+          {{ erpModalMovement.fecha | date:'dd/MM/yyyy' }} ·
+          {{ (erpModalMovement.deposito ?? erpModalMovement.retiro) | currency:'MXN':'symbol':'1.2-2' }}
+        </div>
+      </div>
+      <button class="modal-close" (click)="closeErpModal()">✕</button>
+    </div>
+
+    <div class="modal-body">
+
+      <!-- Concepto del movimiento -->
+      <div class="uuid-mov-info" *ngIf="erpModalMovement">
+        <span class="uuid-mov-concepto">{{ erpModalMovement.concepto }}</span>
+      </div>
+
+      <!-- IDs ya registrados -->
+      <div class="erp-list" *ngIf="(erpModalMovement?.erpIds || []).length > 0">
+        <div class="erp-list-label">IDs vinculados ({{ (erpModalMovement?.erpIds || []).length }})</div>
+        <div class="erp-list-chips">
+          <span *ngFor="let eid of (erpModalMovement?.erpIds || [])" class="erp-chip-lg">
+            {{ eid }}
+            <button class="erp-chip-rm-lg" (click)="removeErpId(erpModalMovement!, eid, $event)"
+                    title="Quitar">
+              <svg width="10" height="10" viewBox="0 0 20 20" fill="none"
+                   stroke="currentColor" stroke-width="2.5">
+                <path d="M5 5l10 10M15 5L5 15"/>
+              </svg>
+            </button>
+          </span>
+        </div>
+      </div>
+
+      <div *ngIf="(erpModalMovement?.erpIds || []).length === 0" class="erp-empty">
+        Sin IDs vinculados aún
+      </div>
+
+      <!-- Agregar nuevo ID -->
+      <div class="form-field">
+        <label class="form-label">Agregar ID de CxC del ERP</label>
+        <div class="erp-input-row">
+          <input class="form-input form-mono" type="text" [(ngModel)]="erpInput"
+                 placeholder="ej. CXC-2024-001"
+                 (keydown.enter)="addErpId()">
+          <button class="btn-erp-confirm"
+                  [disabled]="!erpInput.trim() || savingErp"
+                  (click)="addErpId()">
+            <div *ngIf="savingErp" class="spinner spinner-sm"></div>
+            <svg *ngIf="!savingErp" width="14" height="14" viewBox="0 0 20 20"
+                 fill="none" stroke="currentColor" stroke-width="2.8">
+              <path d="M10 4v12M4 10h12"/>
+            </svg>
+            Agregar
+          </button>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="modal-foot">
+      <button class="btn-ghost" (click)="closeErpModal()">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+
+<style>
+/* ── Página ─────────────────────────────────────────────────────────────────── */
+.bk-page {
+  padding: 2rem;
+  background: #f0f2f5;
+  min-height: 100%;
+  box-sizing: border-box;
+}
+
+/* ── Header tarjetas ────────────────────────────────────────────────────────── */
+.bk-header {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  margin-bottom: 1.75rem; gap: 1rem; flex-wrap: wrap;
+}
+.bk-title {
+  font-size: 1.4rem; font-weight: 700; color: #0f172a; margin: 0 0 .2rem;
+}
+.bk-subtitle { font-size: .875rem; color: #64748b; margin: 0; }
+
+/* ── Botones ─────────────────────────────────────────────────────────────────── */
+.btn-import {
+  display: inline-flex; align-items: center; gap: .45rem;
+  background: #1d4ed8; color: #fff;
+  border: none; border-radius: 8px;
+  padding: .6rem 1.1rem; font-size: .875rem; font-weight: 600;
+  cursor: pointer; transition: background .15s; white-space: nowrap;
+}
+.btn-import:hover:not(:disabled) { background: #1e40af; }
+.btn-import:disabled { opacity: .45; cursor: not-allowed; }
+.btn-import-dark {
+  display: inline-flex; align-items: center; gap: .45rem;
+  background: #0f172a; color: #fff;
+  border: none; border-radius: 8px;
+  padding: .55rem 1rem; font-size: .85rem; font-weight: 600;
+  cursor: pointer; transition: background .15s; white-space: nowrap;
+}
+.btn-import-dark:hover { background: #1e293b; }
+.mt-3 { margin-top: .85rem; }
+
+/* ── Grid de tarjetas ───────────────────────────────────────────────────────── */
+.cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.25rem;
+}
+
+/* ── Tarjeta de banco ───────────────────────────────────────────────────────── */
+.bank-card {
+  background: #fff; border: 1px solid #e5e7eb; border-radius: 16px;
+  padding: 1.1rem 1.2rem .9rem; cursor: pointer;
+  transition: box-shadow .2s, transform .15s;
+  display: flex; flex-direction: column; gap: .85rem;
+}
+.bank-card:hover { box-shadow: 0 8px 28px rgba(0,0,0,.09); transform: translateY(-2px); }
+
+.card-toprow { display: flex; align-items: center; justify-content: space-between; }
+.banco-pill {
+  display: inline-block; font-size: .78rem; font-weight: 800;
+  padding: .28rem .75rem; border-radius: 999px; letter-spacing: .02em;
+}
+.recency-wrap { display: flex; align-items: center; gap: .35rem; }
+.recency-dot  { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.dot-green { background: #22c55e; }
+.dot-amber { background: #f59e0b; }
+.dot-gray  { background: #d1d5db; }
+.recency-label { font-size: .72rem; color: #9ca3af; white-space: nowrap; }
+
+.card-account { display: flex; align-items: center; gap: .45rem; }
+.account-dots { color: #d1d5db; letter-spacing: .08em; font-size: .62rem; }
+.account-num  { font-weight: 600; color: #374151; font-family: monospace; font-size: .85rem; }
+
+.card-stats { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
+.stat-box {
+  background: #f9fafb; border-radius: 9px; padding: .55rem .65rem;
+  display: flex; flex-direction: column; gap: .15rem;
+}
+.stat-label {
+  font-size: .62rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .04em; color: #9ca3af;
+}
+.stat-val { font-size: .88rem; font-weight: 700; color: #111827; }
+.stat-dep { color: #15803d; }
+.stat-ret { color: #dc2626; }
+
+.card-status-row { display: flex; gap: .75rem; align-items: center; }
+.status-mini {
+  display: flex; align-items: center; gap: .3rem;
+  font-size: .75rem; color: #6b7280; font-weight: 500;
+}
+.status-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.dot-pending { background: #f59e0b; }
+.dot-done    { background: #22c55e; }
+.dot-other   { background: #9ca3af; }
+
+.card-cuenta {
+  display: flex; align-items: center; gap: .3rem;
+  font-size: .72rem; color: #6366f1; font-weight: 600;
+}
+.card-footer {
+  display: flex; align-items: center; justify-content: space-between;
+  padding-top: .75rem; border-top: 1px solid #f3f4f6;
+}
+.card-footer-left { display: flex; flex-direction: column; gap: .3rem; }
+.movs-count { font-size: .75rem; color: #9ca3af; }
+.btn-cuenta {
+  display: inline-flex; align-items: center; gap: .3rem;
+  font-size: .72rem; font-weight: 600; color: #6366f1;
+  background: #eef2ff; border: none; padding: .25rem .6rem; border-radius: 6px;
+  cursor: pointer; transition: background .12s;
+}
+.btn-cuenta:hover { background: #e0e7ff; }
+.arrow-icon { color: #d1d5db; transition: color .15s; }
+.bank-card:hover .arrow-icon { color: var(--accent, #334155); }
+
+.cards-loading { display: flex; justify-content: center; padding: 4rem; }
+.cards-empty {
+  background: #fff; border: 1px solid #e5e7eb; border-radius: 14px;
+  padding: 3rem; text-align: center; max-width: 480px; margin: 0 auto;
+}
+.cards-empty-icon  { font-size: 2.5rem; margin-bottom: .6rem; }
+.cards-empty-title { font-size: 1.1rem; font-weight: 700; color: #0f172a; margin-bottom: .4rem; }
+.cards-empty-sub   { font-size: .875rem; color: #6b7280; }
+
+/* ══ VISTA DETALLE ══════════════════════════════════════════════════════════ */
+
+.detail-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 1.5rem; gap: 1rem; flex-wrap: wrap;
+}
+.detail-header-left {
+  display: flex; align-items: center; gap: .75rem; flex-wrap: wrap;
+}
+.back-btn {
+  display: inline-flex; align-items: center; gap: .38rem;
+  background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 8px;
+  padding: .45rem .9rem .45rem .75rem;
+  font-size: .84rem; font-weight: 600; color: #475569;
+  cursor: pointer;
+  transition: background .15s, border-color .15s, color .12s, box-shadow .15s;
+  box-shadow: 0 1px 3px rgba(0,0,0,.05), inset 0 1px 0 rgba(255,255,255,.9);
+  white-space: nowrap;
+}
+.back-btn:hover {
+  background: #f1f5f9; border-color: #94a3b8; color: #1e293b;
+  box-shadow: 0 2px 6px rgba(0,0,0,.08), inset 0 1px 0 rgba(255,255,255,.9);
+}
+.back-btn:active { background: #e2e8f0; border-color: #94a3b8; box-shadow: none; transform: translateY(1px); }
+.back-btn svg { opacity: .65; transition: opacity .12s, transform .15s; }
+.back-btn:hover svg { opacity: 1; transform: translateX(-2px); }
+.detail-pill { font-size: .8rem; }
+.detail-bank-info { display: flex; align-items: center; gap: .45rem; flex-wrap: wrap; }
+.detail-bank-name { font-size: 1.15rem; font-weight: 700; color: #111827; }
+.detail-meta-sep  { color: #d1d5db; font-size: .9rem; }
+.account-dots-sm  { color: #d1d5db; letter-spacing: .06em; font-size: .6rem; }
+.detail-account   { font-family: monospace; font-size: .85rem; font-weight: 600; color: #374151; }
+.detail-recency   { display: flex; align-items: center; gap: .3rem; font-size: .78rem; color: #9ca3af; }
+
+.stats-bar {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: .85rem;
+  margin-bottom: 1.25rem;
+}
+.stats-card {
+  background: #fff; border: 1px solid #e5e7eb; border-radius: 12px;
+  padding: .9rem 1.1rem; display: flex; flex-direction: column; gap: .25rem;
+}
+.stats-label {
+  font-size: .7rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .05em; color: #9ca3af;
+}
+.stats-val  { font-size: 1.3rem; font-weight: 800; color: #111827; }
+.stats-dep  { color: #15803d; }
+.stats-ret  { color: #dc2626; }
+
+.mov-panel {
+  background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden;
+}
+
+.mov-panel-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 1rem 1.25rem .75rem; border-bottom: 1px solid #f3f4f6;
+}
+.mov-panel-title { display: flex; align-items: baseline; gap: .6rem; }
+.mov-panel-name  { font-size: .95rem; font-weight: 700; color: #111827; }
+.mov-panel-count { font-size: .8rem; color: #9ca3af; }
+
+.filter-bar {
+  display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
+  padding: .65rem 1.25rem; border-bottom: 1px solid #f3f4f6;
+}
+.search-wrap {
+  display: flex; align-items: center; gap: .4rem; flex: 1; min-width: 200px;
+  background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px;
+  padding: .4rem .7rem;
+}
+.search-ico { flex-shrink: 0; }
+.search-inp {
+  flex: 1; border: none; outline: none; font-size: .875rem;
+  color: #111827; background: transparent; min-width: 0;
+}
+.search-inp::placeholder { color: #9ca3af; }
+.search-clear {
+  color: #9ca3af; cursor: pointer; font-size: .75rem;
+  padding: .1rem .3rem; border-radius: 4px; border: none; background: none;
+}
+.search-clear:hover { color: #374151; }
+.filter-sel {
+  padding: .42rem .65rem; border: 1px solid #e5e7eb; border-radius: 8px;
+  font-size: .83rem; background: #f9fafb; color: #374151; outline: none;
+  cursor: pointer;
+}
+.filter-sel:focus { border-color: #6366f1; }
+.btn-clear {
+  padding: .38rem .75rem; border: 1px solid #e5e7eb; border-radius: 7px;
+  background: #f9fafb; color: #6b7280; font-size: .8rem; cursor: pointer;
+}
+.btn-clear:hover { border-color: #9ca3af; color: #374151; }
+
+.mov-table-wrap { overflow-x: auto; }
+.mov-table {
+  width: 100%; border-collapse: collapse; font-size: .84rem; min-width: 860px;
+}
+.mov-table thead th {
+  padding: .55rem 1rem; text-align: left;
+  font-size: .68rem; font-weight: 700;
+  color: #9ca3af; text-transform: uppercase; letter-spacing: .06em;
+  border-bottom: 1px solid #f3f4f6; white-space: nowrap; background: #fff;
+}
+.mov-table thead th.th-right  { text-align: right; }
+.mov-table thead th.th-sort   { cursor: pointer; user-select: none; }
+.mov-table thead th.th-sort:hover { color: #6b7280; }
+.mov-table thead th.th-active { color: #6366f1; }
+.th-concepto { width: 35%; }
+.sort-ico { opacity: .5; margin-left: .2rem; font-size: .8em; }
+
+.mov-table tbody tr {
+  border-bottom: 1px solid #f3f4f6; transition: background .08s;
+}
+.mov-table tbody tr:last-child { border-bottom: none; }
+.mov-table tbody tr:hover { background: #fafafa; }
+.mov-table tbody tr.row-locked { background: #fcfcfc; }
+.mov-table td { padding: .7rem 1rem; color: #374151; vertical-align: middle; }
+
+.th-id      { width: 110px; white-space: nowrap; }
+.td-id      { white-space: nowrap; }
+.td-date    { white-space: nowrap; color: #6b7280; font-size: .82rem; }
+.td-right   { text-align: right; white-space: nowrap; }
+.td-auth    { font-family: monospace; font-size: .78rem; color: #9ca3af; }
+.td-uuid    { white-space: nowrap; }
+.td-concepto { max-width: 0; }
+.td-dash    { color: #d1d5db; }
+
+.folio-chip {
+  display: inline-block; font-family: monospace; font-size: .72rem; font-weight: 700;
+  color: #6b7280; background: #f3f4f6; border: 1px solid #e5e7eb;
+  padding: .18rem .5rem; border-radius: 5px; white-space: nowrap; letter-spacing: .02em;
+}
+
+.concepto-text {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: #374151;
+  font-size: .8rem;
+  line-height: 1.45;
+  letter-spacing: .03em;
+  word-break: break-word;
+  max-width: 28ch;
+}
+
+.amount-dep { color: #15803d; font-weight: 600; }
+.amount-ret { color: #dc2626; font-weight: 600; }
+
+.cat-chip {
+  display: inline-block; font-size: .72rem; font-weight: 600;
+  padding: .22rem .6rem; border-radius: 6px; white-space: nowrap;
+}
+
+.status-pill {
+  display: inline-flex; align-items: center; gap: .3rem;
+  font-size: .72rem; font-weight: 600; padding: .25rem .65rem;
+  border-radius: 999px; border: none; cursor: pointer;
+  transition: filter .15s; white-space: nowrap;
+}
+.status-pill:hover:not(.pill-locked) { filter: brightness(.92); }
+.pill-locked { cursor: default; }
+.st-pending { background: #fef9c3; color: #92400e; }
+.st-done    { background: #dcfce7; color: #15803d; }
+.st-other   { background: #f1f5f9; color: #475569; }
+
+.uuid-chip {
+  display: inline-block; font-family: monospace; font-size: .72rem;
+  background: #dbeafe; color: #1d4ed8; font-weight: 600;
+  padding: .2rem .5rem; border-radius: 5px;
+}
+.btn-uuid-link {
+  display: inline-flex; align-items: center; gap: .3rem;
+  font-size: .72rem; font-weight: 600; color: #6366f1;
+  background: #eef2ff; border: 1px solid #c7d2fe;
+  padding: .22rem .6rem; border-radius: 6px; cursor: pointer;
+  transition: background .12s;
+}
+.btn-uuid-link:hover { background: #e0e7ff; }
+
+.empty-state { text-align: center; padding: 2.5rem 1rem; }
+.empty-icon  { font-size: 2rem; margin-bottom: .5rem; }
+.empty-title { font-weight: 600; color: #374151; margin-bottom: .35rem; }
+.empty-sub   { font-size: .85rem; color: #9ca3af; }
+.mt-2 { margin-top: .5rem; }
+
+.table-loading {
+  display: flex; align-items: center; justify-content: center;
+  gap: .75rem; padding: 3rem; color: #6b7280; font-size: .9rem;
+}
+
+.spinner {
+  width: 26px; height: 26px;
+  border: 3px solid #e5e7eb; border-top-color: #6366f1;
+  border-radius: 50%; animation: spin .65s linear infinite;
+}
+.spinner.spinner-sm { width: 15px; height: 15px; border-width: 2px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.pag-bar {
+  display: flex; align-items: center; gap: .4rem; flex-wrap: wrap;
+  padding: .75rem 1.25rem; border-top: 1px solid #f3f4f6;
+}
+.pag-btn {
+  min-width: 32px; height: 32px; border-radius: 6px;
+  border: 1px solid #e5e7eb; background: #fff;
+  font-size: .83rem; color: #374151;
+  cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+  transition: border-color .12s, background .12s, color .12s; padding: 0 .5rem;
+}
+.pag-btn:hover:not(:disabled) { border-color: #6366f1; color: #4338ca; }
+.pag-btn:disabled { opacity: .35; cursor: not-allowed; }
+.pag-current { border-color: #6366f1; background: #eef2ff; color: #4338ca; font-weight: 700; }
+.pag-nav { font-size: 1.1rem; }
+.pag-gap { color: #9ca3af; padding: 0 .2rem; }
+.pag-info { font-size: .78rem; color: #9ca3af; margin-left: auto; }
+
+/* ══ MODALES ══════════════════════════════════════════════════════════════════ */
+.modal-backdrop {
+  position: fixed; inset: 0; background: rgba(15,23,42,.4);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1000; padding: 1rem; backdrop-filter: blur(3px);
+}
+.modal-box {
+  background: #fff; border-radius: 14px; width: 100%; max-width: 520px;
+  max-height: 90vh; overflow-y: auto;
+  box-shadow: 0 24px 64px rgba(0,0,0,.18);
+  display: flex; flex-direction: column;
+}
+.modal-sm { max-width: 440px; }
+
+.modal-head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  padding: 1.1rem 1.4rem; border-bottom: 1px solid #f3f4f6;
+  background: #f9fafb; flex-shrink: 0; border-radius: 14px 14px 0 0;
+}
+.modal-title { font-weight: 700; font-size: 1rem; color: #111827; }
+.modal-sub   { font-size: .8rem; color: #9ca3af; margin-top: .15rem; }
+.modal-close {
+  background: none; border: none; cursor: pointer; color: #9ca3af;
+  font-size: 1.1rem; padding: .2rem .4rem; border-radius: 5px;
+  transition: color .12s, background .12s; line-height: 1;
+}
+.modal-close:hover { color: #374151; background: #e5e7eb; }
+
+.modal-body {
+  padding: 1.25rem 1.4rem; display: flex; flex-direction: column; gap: 1rem; flex: 1;
+}
+.modal-foot {
+  display: flex; align-items: center; justify-content: flex-end; gap: .75rem;
+  padding: .9rem 1.4rem; border-top: 1px solid #f3f4f6;
+  background: #f9fafb; flex-shrink: 0; border-radius: 0 0 14px 14px;
+}
+.btn-ghost {
+  padding: .5rem 1rem; border: 1px solid #e5e7eb; border-radius: 8px;
+  background: none; color: #6b7280; font-size: .875rem; cursor: pointer;
+}
+.btn-ghost:hover { border-color: #9ca3af; color: #374151; }
+
+.field-label {
+  font-size: .72rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .05em; color: #6b7280;
+}
+.bank-pills { display: flex; flex-wrap: wrap; gap: .4rem; }
+.bank-pill {
+  padding: .4rem .9rem; border-radius: 8px; border: 1.5px solid #e5e7eb;
+  background: #fff; font-size: .85rem; font-weight: 500; color: #6b7280;
+  cursor: pointer; transition: all .12s;
+}
+.bank-pill:hover { border-color: #9ca3af; }
+.bank-pill.active {
+  border-color: var(--bc, #6366f1);
+  background: color-mix(in srgb, var(--bc, #6366f1) 10%, white);
+  color: var(--bc, #4338ca); font-weight: 600;
+}
+
+.dropzone {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: .5rem; padding: 1.75rem; border: 2px dashed #d1d5db; border-radius: 10px;
+  cursor: pointer; text-align: center; transition: border-color .15s, background .15s;
+}
+.dropzone:hover, .dropzone.drag-over { border-color: #6366f1; background: #f5f3ff; }
+.dropzone.has-file { border-color: #22c55e; background: #f0fdf4; }
+.drop-label    { font-size: .875rem; font-weight: 500; color: #374151; }
+.drop-hint     { font-size: .75rem; color: #9ca3af; }
+.drop-file-name { font-size: .875rem; font-weight: 600; color: #15803d; }
+
+.import-result {
+  display: flex; align-items: flex-start; gap: .65rem;
+  padding: .75rem 1rem; border-radius: 8px; font-size: .85rem;
+}
+.import-result.success { background: #f0fdf4; color: #15803d; }
+.import-result.error   { background: #fef2f2; color: #b91c1c; }
+.result-dup   { color: #6b7280; }
+.result-chips { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .4rem; }
+.result-chip  {
+  background: #bbf7d0; color: #15803d; font-size: .7rem; font-weight: 600;
+  padding: .15rem .45rem; border-radius: 4px;
+}
+
+.form-field { display: flex; flex-direction: column; gap: .4rem; }
+.form-label { font-size: .75rem; font-weight: 700; color: #374151; }
+.form-input {
+  padding: .55rem .8rem; border: 1px solid #e5e7eb; border-radius: 8px;
+  font-size: .875rem; color: #111827; outline: none;
+  transition: border-color .15s;
+}
+.form-input:focus { border-color: #6366f1; }
+.form-mono { font-family: monospace; font-size: .85rem; }
+.form-hint { font-size: .72rem; color: #9ca3af; }
+
+.uuid-mov-info {
+  background: #f9fafb; border-radius: 8px; padding: .65rem .85rem;
+  border: 1px solid #f3f4f6;
+}
+.uuid-mov-concepto {
+  font-size: .85rem; color: #374151; font-weight: 500; line-height: 1.4;
+  display: block;
+}
+.uuid-warning {
+  display: flex; align-items: flex-start; gap: .5rem;
+  font-size: .78rem; color: #92400e; line-height: 1.5;
+  background: #fffbeb; border: 1px solid #fde68a;
+  border-radius: 8px; padding: .6rem .85rem;
+}
+
+/* ── IDs ERP — celda tabla ───────────────────────────────────────────────────── */
+.td-erp { white-space: nowrap; }
+.erp-ids-wrap {
+  display: flex; align-items: center; gap: .3rem; flex-wrap: wrap; min-width: 80px;
+}
+.erp-chip {
+  display: inline-flex; align-items: center; gap: .25rem;
+  font-size: .7rem; font-weight: 600; color: #3730a3;
+  background: #eef2ff; border: 1px solid #c7d2fe;
+  padding: .18rem .4rem .18rem .5rem; border-radius: 5px;
+  white-space: nowrap;
+}
+.erp-chip-rm {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 14px; height: 14px;
+  background: none; border: none; cursor: pointer;
+  color: #818cf8; font-size: .8rem; line-height: 1; border-radius: 3px;
+  padding: 0; transition: background .1s, color .1s;
+}
+.erp-chip-rm:hover { background: #c7d2fe; color: #3730a3; }
+.btn-erp-add {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px;
+  background: #f3f4f6; border: 1px dashed #d1d5db;
+  border-radius: 5px; cursor: pointer; color: #6b7280;
+  transition: background .12s, border-color .12s, color .12s;
+  flex-shrink: 0;
+}
+.btn-erp-add:hover { background: #eef2ff; border-color: #818cf8; color: #4338ca; }
+
+/* ── IDs ERP — modal ────────────────────────────────────────────────────────── */
+.erp-list { display: flex; flex-direction: column; gap: .4rem; }
+.erp-list-label {
+  font-size: .7rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .05em; color: #9ca3af;
+}
+.erp-list-chips { display: flex; flex-wrap: wrap; gap: .4rem; }
+.erp-chip-lg {
+  display: inline-flex; align-items: center; gap: .35rem;
+  font-size: .8rem; font-weight: 600; color: #3730a3;
+  background: #eef2ff; border: 1px solid #c7d2fe;
+  padding: .3rem .5rem .3rem .7rem; border-radius: 7px;
+}
+.erp-chip-rm-lg {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px;
+  background: none; border: none; cursor: pointer;
+  color: #a5b4fc; border-radius: 4px; padding: 0;
+  transition: background .1s, color .1s;
+}
+.erp-chip-rm-lg:hover { background: #c7d2fe; color: #3730a3; }
+.erp-empty {
+  font-size: .82rem; color: #9ca3af; font-style: italic;
+  text-align: center; padding: .5rem 0;
+}
+.erp-input-row {
+  display: flex; gap: .5rem;
+}
+.erp-input-row .form-input { flex: 1; }
+.btn-erp-confirm {
+  display: inline-flex; align-items: center; gap: .35rem;
+  background: #4338ca; color: #fff; border: none; border-radius: 8px;
+  padding: .55rem .9rem; font-size: .83rem; font-weight: 600;
+  cursor: pointer; transition: background .15s; white-space: nowrap;
+}
+.btn-erp-confirm:hover:not(:disabled) { background: #3730a3; }
+.btn-erp-confirm:disabled { opacity: .45; cursor: not-allowed; }
+</style>

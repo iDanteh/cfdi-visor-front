@@ -1,0 +1,259 @@
+<div class="page">
+
+  <!-- ── Header ──────────────────────────────────────────────────────────── -->
+  <div class="page-header">
+    <div>
+      <div class="page-title">Catálogo de Cuentas</div>
+      <div class="page-subtitle">Plan contable SAT · {{ allAccounts.length | number }} cuentas activas</div>
+    </div>
+    <div class="flex gap-2 items-center">
+      <button class="btn btn-secondary btn-sm" (click)="collapseAll()">Colapsar</button>
+      <button class="btn btn-secondary btn-sm" (click)="expandAll()">Expandir todo</button>
+      <button class="btn btn-primary" (click)="openCreate()">+ Nueva cuenta</button>
+    </div>
+  </div>
+
+  <!-- ── Resumen por tipo (pills clicables) ────────────────────────────── -->
+  <div class="flex gap-2 mb-4 flex-wrap">
+    <span class="tipo-pill tipo-pill-activo"
+      [class.active]="filterTipo === 'ACTIVO'"
+      (click)="filterTipo = (filterTipo === 'ACTIVO' ? '' : 'ACTIVO'); applyFilter()">
+      Activo <span class="tipo-pill-count">{{ countByTipo('ACTIVO') }}</span>
+    </span>
+    <span class="tipo-pill tipo-pill-pasivo"
+      [class.active]="filterTipo === 'PASIVO'"
+      (click)="filterTipo = (filterTipo === 'PASIVO' ? '' : 'PASIVO'); applyFilter()">
+      Pasivo <span class="tipo-pill-count">{{ countByTipo('PASIVO') }}</span>
+    </span>
+    <span class="tipo-pill tipo-pill-capital"
+      [class.active]="filterTipo === 'CAPITAL'"
+      (click)="filterTipo = (filterTipo === 'CAPITAL' ? '' : 'CAPITAL'); applyFilter()">
+      Capital <span class="tipo-pill-count">{{ countByTipo('CAPITAL') }}</span>
+    </span>
+    <span class="tipo-pill tipo-pill-ingreso"
+      [class.active]="filterTipo === 'INGRESO'"
+      (click)="filterTipo = (filterTipo === 'INGRESO' ? '' : 'INGRESO'); applyFilter()">
+      Ingreso <span class="tipo-pill-count">{{ countByTipo('INGRESO') }}</span>
+    </span>
+    <span class="tipo-pill tipo-pill-gasto"
+      [class.active]="filterTipo === 'GASTO'"
+      (click)="filterTipo = (filterTipo === 'GASTO' ? '' : 'GASTO'); applyFilter()">
+      Gasto <span class="tipo-pill-count">{{ countByTipo('GASTO') }}</span>
+    </span>
+    <span *ngIf="hasActiveFilter()"
+      class="tipo-pill"
+      style="border: 1.5px solid var(--gray-300); color: var(--gray-500); background: #fff;"
+      (click)="clearFilter()">
+      ✕ Limpiar
+    </span>
+  </div>
+
+  <!-- ── Barra de importación ─────────────────────────────────────────── -->
+  <div class="catalog-import-bar">
+    <span class="catalog-import-label">Importar catálogo SAT</span>
+
+    <label class="import-dropzone" style="flex:1; min-width:220px; max-width:400px;"
+      [class.import-dropzone-drag]="isDragging"
+      (dragover)="onDragOver($event)" (dragleave)="onDragLeave()" (drop)="onDrop($event)">
+      <input type="file" accept=".xlsx,.xls" (change)="onFileSelected($event)" style="display:none">
+      <span class="import-dropzone-icon">{{ selectedFile ? '📄' : '📂' }}</span>
+      <span class="import-dropzone-text">
+        {{ selectedFile ? selectedFile.name : 'Seleccionar Excel (.xlsx) — col: Codigo, Nombre, CtaMayor' }}
+      </span>
+    </label>
+
+    <button class="btn btn-secondary"
+      (click)="importExcel()"
+      [disabled]="importing || !selectedFile">
+      <span *ngIf="!importing">↑ Importar</span>
+      <span *ngIf="importing" class="flex gap-1 items-center">
+        <span class="spinner spinner-sm"></span> Procesando…
+      </span>
+    </button>
+
+    <div *ngIf="importResult || importError" class="catalog-import-result">
+      <span *ngIf="importResult" class="text-success">
+        ✓ <strong>{{ importResult.importados }}</strong> nuevas,
+        <strong>{{ importResult.actualizados }}</strong> actualizadas
+        <span *ngIf="importResult.omitidos > 0" class="text-warning">
+          · {{ importResult.omitidos }} omitidas
+        </span>
+      </span>
+      <details *ngIf="importResult?.errores?.length">
+        <summary class="text-xs text-danger" style="cursor:pointer">
+          {{ importResult!.errores.length }} advertencias
+        </summary>
+        <ul class="text-xs text-muted mt-1" style="max-height:80px;overflow-y:auto;padding-left:1rem;">
+          <li *ngFor="let e of importResult!.errores">{{ e }}</li>
+        </ul>
+      </details>
+      <span *ngIf="importError" class="text-danger text-sm">✗ {{ importError }}</span>
+    </div>
+  </div>
+
+  <!-- ── Árbol de cuentas ───────────────────────────────────────────────── -->
+  <div class="tree-container">
+
+    <!-- Toolbar de filtros -->
+    <div class="table-toolbar">
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input [(ngModel)]="searchTerm" (input)="applyFilter()"
+          placeholder="Buscar código o nombre…" class="search-input">
+        <button *ngIf="searchTerm" (click)="searchTerm=''; applyFilter()" class="search-clear">✕</button>
+      </div>
+      <span class="toolbar-count text-xs text-muted ml-auto">
+        {{ visibleNodes.length | number }} cuentas
+      </span>
+    </div>
+
+    <!-- Header de columnas -->
+    <div class="tree-header">
+      <div style="flex:1; padding: 0 0 0 12px;">
+        <span class="tree-header-col">Código · Nombre</span>
+      </div>
+      <div class="tree-header-col tree-col-tipo">Tipo</div>
+      <div class="tree-header-col tree-col-nat">Naturaleza</div>
+      <div class="tree-header-col tree-col-nivel" style="text-align:center">Nv.</div>
+      <div class="tree-header-col tree-col-acts" style="text-align:right">Acciones</div>
+    </div>
+
+    <!-- Spinner -->
+    <div *ngIf="loading" class="loading-area">
+      <div class="spinner"></div><span>Cargando catálogo…</span>
+    </div>
+
+    <!-- Nodos del árbol -->
+    <ng-container *ngIf="!loading">
+      <div *ngFor="let node of visibleNodes"
+        class="tree-node"
+        [class.tree-node-root]="node.nivel === 1"
+        [class.tree-node-mayor]="node.children.length > 0 && node.nivel > 1">
+
+        <!-- Sangría + conector -->
+        <div class="tree-indent">
+          <ng-container *ngFor="let _ of getGuides(node)">
+            <div class="tree-guide"></div>
+          </ng-container>
+          <button *ngIf="node.children.length > 0"
+            class="tree-toggle"
+            (click)="toggleNode(node)"
+            [title]="node.expanded ? 'Colapsar' : 'Expandir'">
+            {{ node.expanded ? '▾' : '▸' }}
+          </button>
+          <div *ngIf="node.children.length === 0" class="tree-leaf-dot"></div>
+        </div>
+
+        <!-- Código -->
+        <div class="tree-code">{{ node.codigo }}</div>
+
+        <!-- Nombre -->
+        <div class="tree-name" [title]="node.nombre">{{ node.nombre }}</div>
+
+        <!-- Tipo -->
+        <div class="tree-col-tipo">
+          <span class="badge badge-sm" [class]="tipoColor(node.tipo)">{{ node.tipo }}</span>
+        </div>
+
+        <!-- Naturaleza -->
+        <div class="tree-col-nat">
+          <span class="nat-chip"
+            [class.nat-chip-deudora]="node.naturaleza==='DEUDORA'"
+            [class.nat-chip-acreedora]="node.naturaleza==='ACREEDORA'">
+            {{ node.naturaleza }}
+          </span>
+        </div>
+
+        <!-- Nivel -->
+        <div class="tree-col-nivel">{{ node.nivel }}</div>
+
+        <!-- Acciones -->
+        <div class="tree-col-acts">
+          <button class="btn btn-secondary btn-xs" title="Subcuenta" (click)="openCreate(node)">+</button>
+          <button class="btn btn-secondary btn-xs" title="Editar" (click)="openEdit(node)">✎</button>
+          <button class="btn btn-secondary btn-xs" title="Desactivar" (click)="deactivate(node)">✕</button>
+        </div>
+      </div>
+
+      <!-- Estado vacío -->
+      <div *ngIf="visibleNodes.length === 0">
+        <div class="empty-state">
+          <div class="empty-state-icon">📒</div>
+          <div class="empty-state-title">Sin cuentas</div>
+          <div class="empty-state-desc">
+            {{ hasActiveFilter()
+                ? 'Ninguna cuenta coincide con el filtro actual'
+                : 'Importa tu catálogo de Excel o crea la primera cuenta' }}
+          </div>
+        </div>
+      </div>
+    </ng-container>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!--  Modal: crear / editar cuenta                                          -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<div *ngIf="showModal" class="modal-backdrop" (click)="closeModal()">
+  <div class="modal-box modal-sm" (click)="$event.stopPropagation()">
+
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">
+          {{ modalMode === 'create' ? 'Nueva cuenta contable' : 'Editar cuenta' }}
+        </div>
+        <div *ngIf="modalMode === 'edit'" class="text-xs text-muted mt-1">
+          El código es inmutable · tipo y naturaleza se auto-clasifican
+        </div>
+      </div>
+      <button class="modal-close-btn" (click)="closeModal()">×</button>
+    </div>
+
+    <form [formGroup]="accountForm" class="modal-body">
+
+      <div class="form-group">
+        <label class="form-label">Código *</label>
+        <input formControlName="codigo"
+          class="form-control"
+          [class.is-invalid]="accountForm.get('codigo')!.invalid && accountForm.get('codigo')!.touched"
+          placeholder="p. ej. 1101010001">
+        <div class="form-error"
+          *ngIf="accountForm.get('codigo')!.invalid && accountForm.get('codigo')!.touched">
+          Solo dígitos numéricos (máx. 10)
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Nombre *</label>
+        <input formControlName="nombre"
+          class="form-control"
+          [class.is-invalid]="accountForm.get('nombre')!.invalid && accountForm.get('nombre')!.touched"
+          placeholder="p. ej. Bancos — BBVA">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Cuenta de Mayor <span class="text-muted" style="font-weight:400">(opcional)</span></label>
+        <input formControlName="ctaMayor"
+          class="form-control"
+          placeholder="Código de la cuenta padre, p. ej. 110">
+        <div class="text-xs text-muted mt-1">
+          Deja vacío si es una cuenta raíz o cuenta de mayor sin padre
+        </div>
+      </div>
+
+      <div *ngIf="modalError" class="alert-error">⚠ {{ modalError }}</div>
+    </form>
+
+    <div class="modal-footer">
+      <button class="btn btn-secondary" (click)="closeModal()">Cancelar</button>
+      <button class="btn btn-primary"
+        (click)="saveAccount()"
+        [disabled]="saving || accountForm.invalid">
+        <span *ngIf="!saving">{{ modalMode === 'create' ? 'Crear cuenta' : 'Guardar cambios' }}</span>
+        <span *ngIf="saving" class="flex gap-1 items-center">
+          <span class="spinner spinner-sm"></span> Guardando…
+        </span>
+      </button>
+    </div>
+  </div>
+</div>
