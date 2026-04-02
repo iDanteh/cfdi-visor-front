@@ -3,14 +3,14 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 
-import { DiscrepanciesComponent } from './discrepancies.component';
+import { CollectionRequestComponent } from './collection-request.component';
 
 @NgModule({
-  declarations: [DiscrepanciesComponent],
+  declarations: [CollectionRequestComponent],
   imports: [
     CommonModule,
     FormsModule,
-    RouterModule.forChild([{ path: '', component: DiscrepanciesComponent }]),
+    RouterModule.forChild([{ path: '', component: CollectionRequestComponent }]),
   ],
 })
-export class DiscrepanciesModule {}
+export class CollectionRequestModule {}

@@ -4,7 +4,7 @@
   <div class="page-header">
     <div>
       <div class="page-title">CFDIs</div>
-      <div class="page-subtitle">Carga y compara documentos del ERP contra el SAT</div>
+      <div class="page-subtitle">Carga y consulta documentos fiscales</div>
     </div>
   </div>
 
@@ -14,25 +14,6 @@
       <span class="card-title">Cargar XMLs</span>
     </div>
     <div class="card-body">
-
-      <!-- Flujo -->
-      <div class="flow-steps">
-        <div class="flow-step step-erp">
-          <div class="flow-step-num">① ERP</div>
-          <div class="flow-step-title">Sube el XML del ERP</div>
-          <div class="flow-step-desc">El CFDI generado por tu sistema</div>
-        </div>
-        <div class="flow-step step-sat">
-          <div class="flow-step-num">② SAT</div>
-          <div class="flow-step-title">Sube el XML del SAT</div>
-          <div class="flow-step-desc">Descargado del portal, mismo UUID</div>
-        </div>
-        <div class="flow-step step-cmp">
-          <div class="flow-step-num">③ Comparar</div>
-          <div class="flow-step-title">Detecta diferencias</div>
-          <div class="flow-step-desc">Campo a campo: montos, RFC, IVA</div>
-        </div>
-      </div>
 
       <!-- Zona de carga -->
       <label class="upload-zone mb-4" style="display:block;">
@@ -137,13 +118,11 @@
           <th>Total</th>
           <th>Fecha</th>
           <th>Estado SAT</th>
-          <th>Comparación</th>
           <th>Acciones</th>
         </tr>
       </thead>
       <tbody>
-        <tr *ngFor="let cfdi of cfdis"
-          [class.diff-row-critical]="cfdi.lastComparisonStatus === 'discrepancy'">
+        <tr *ngFor="let cfdi of cfdis">
 
           <td>
             <span class="font-mono text-xs text-muted" [title]="cfdi.uuid">
@@ -187,34 +166,17 @@
           </td>
 
           <td>
-            <span *ngIf="cfdi.lastComparisonStatus" class="badge"
-              [ngClass]="compStatusColors[cfdi.lastComparisonStatus] || 'badge-secondary'">
-              {{ compStatusLabel[cfdi.lastComparisonStatus] || cfdi.lastComparisonStatus }}
-            </span>
-            <span *ngIf="!cfdi.lastComparisonStatus && cfdi.source === 'ERP'" class="text-xs text-muted">Sin comparar</span>
-            <span *ngIf="!cfdi.lastComparisonStatus && cfdi.source !== 'ERP'" class="text-xs text-muted">—</span>
-          </td>
-
-          <td>
-            <div class="flex gap-2">
-              <button *ngIf="cfdi.source === 'ERP'"
-                (click)="compareCFDI(cfdi)" [disabled]="cfdi.comparing"
-                class="btn btn-primary btn-xs"
-                title="Comparar con SAT">
-                {{ cfdi.comparing ? '...' : '⟳ Comparar' }}
-              </button>
-              <button (click)="downloadXML(cfdi)"
-                class="btn btn-secondary btn-xs"
-                title="Descargar XML">
-                ↓ XML
-              </button>
-            </div>
+            <button (click)="downloadXML(cfdi)"
+              class="btn btn-secondary btn-xs"
+              title="Descargar XML">
+              ↓ XML
+            </button>
           </td>
 
         </tr>
 
         <tr *ngIf="cfdis.length === 0">
-          <td colspan="10">
+          <td colspan="9">
             <div class="empty-state">
               <div class="empty-state-icon">📭</div>
               <div class="empty-state-title">Sin CFDIs cargados</div>

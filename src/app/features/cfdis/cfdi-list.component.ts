@@ -1,9 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { FormBuilder, FormGroup } from '@angular/forms';
 import { CfdiService, CFDIFilter } from '../../core/services/cfdi.service';
-import { CFDI, PaginatedResponse, Comparison } from '../../core/models/cfdi.model';
-
-type CFDIWithState = CFDI & { comparing?: boolean };
+import { CFDI, PaginatedResponse } from '../../core/models/cfdi.model';
 
 @Component({
   standalone: false,
@@ -11,7 +9,7 @@ type CFDIWithState = CFDI & { comparing?: boolean };
   templateUrl: './cfdi-list.component.html',
 })
 export class CfdiListComponent implements OnInit {
-  cfdis: CFDIWithState[] = [];
+  cfdis: CFDI[] = [];
   pagination = { total: 0, page: 1, limit: 20, pages: 0 };
   loading = false;
   uploadLoading = false;
@@ -50,14 +48,14 @@ export class CfdiListComponent implements OnInit {
     private fb: FormBuilder,
   ) {
     this.filterForm = this.fb.group({
-      source: [''],
+      source:            [''],
       tipoDeComprobante: [''],
-      rfcEmisor: [''],
-      rfcReceptor: [''],
-      satStatus: [''],
-      fechaInicio: [''],
-      fechaFin: [''],
-      search: [''],
+      rfcEmisor:         [''],
+      rfcReceptor:       [''],
+      satStatus:         [''],
+      fechaInicio:       [''],
+      fechaFin:          [''],
+      search:            [''],
     });
   }
 
@@ -96,16 +94,6 @@ export class CfdiListComponent implements OnInit {
         this.loadCFDIs();
       },
       error: () => { this.uploadLoading = false; },
-    });
-  }
-
-  compareCFDI(cfdi: CFDIWithState): void {
-    cfdi.comparing = true;
-    this.cfdiService.compare(cfdi._id).subscribe({
-      next: (_comp: Comparison) => {
-        this.loadCFDIs(this.pagination.page);
-      },
-      error: () => { cfdi.comparing = false; },
     });
   }
 

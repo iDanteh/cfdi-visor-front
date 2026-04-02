@@ -1,6 +1,5 @@
 import { Component } from '@angular/core';
 import { AuthService } from './core/services/auth.service';
-import { Router } from '@angular/router';
 
 @Component({
   standalone: false,
@@ -10,7 +9,7 @@ import { Router } from '@angular/router';
 export class AppComponent {
   sidebarCollapsed = false;
 
-  constructor(public auth: AuthService, private router: Router) {}
+  constructor(public auth: AuthService) {}
 
   toggleSidebar(): void {
     this.sidebarCollapsed = !this.sidebarCollapsed;
