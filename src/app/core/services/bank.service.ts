@@ -23,15 +23,18 @@ export interface BankMovement {
 }
 
 export interface BankCard {
-  banco:          string;
-  movimientos:    number;
-  totalDepositos: number;
-  totalRetiros:   number;
-  saldoFinal:     number | null;
-  ultimaFecha:    string | null;
-  ultimaImport:   string | null;
-  cuentaContable: string | null;
-  numeroCuenta:   string | null;
+  banco:           string;
+  movimientos:     number;
+  totalDepositos:  number;
+  totalRetiros:    number;
+  saldoFinal:      number | null;
+  saldoPendiente:    number;
+  saldoIdentificado: number;
+  saldoOtros:        number;
+  ultimaFecha:     string | null;
+  ultimaImport:    string | null;
+  cuentaContable:  string | null;
+  numeroCuenta:    string | null;
   porStatus: {
     no_identificado: number;
     identificado:    number;
@@ -65,6 +68,123 @@ export interface BankFilter {
   sortDir?:     string;
   status?:      string;
   categoria?:   string;
+}
+
+export interface ErpCxC {
+  id:               string;
+  serie:            string;
+  folio:            string;
+  tipoPago:         string | null;
+  subtotal:         number;
+  impuesto:         number;
+  total:            number;
+  saldoActual:      number;
+  fechaVencimiento: string | null;
+}
+
+export interface CxcSnapshot {
+  _id:              string;
+  erpId:            string;
+  serie:            string;
+  folio:            string;
+  tipoPago:         string | null;
+  subtotal:         number;
+  impuesto:         number;
+  total:            number;
+  saldoActual:      number;
+  fechaVencimiento: string | null;
+  is_vinculated:    boolean;
+  snapshotAt:       string;
+}
+
+export type MatchType =
+  | 'exacto'
+  | 'cercano'
+  | 'folio_en_concepto'
+  | 'referencia_numerica'
+  | 'numero_autorizacion';
+
+export interface CxcMatchMovement {
+  _id:               string;
+  banco:             string;
+  fecha:             string;
+  concepto:          string;
+  deposito:          number;
+  capacidadRestante: number;
+  comprometido:      number;
+  status:            string;
+  folio:             string | null;
+  uuidXML:           string | null;
+  erpIds:            string[];
+  referenciaNumerica: string | null;
+  categoria:         string | null;
+  matchType:         MatchType;
+  score:             number;
+  diferencia:        number;
+  daysFromVenc:      number | null;
+  esConflicto:       boolean;
+}
+
+export interface CxcMatchResult {
+  cxc:     CxcSnapshot;
+  matches: CxcMatchMovement[];
+}
+
+// ── Matching combinacional (1 depósito ↔ N CxC) ───────────────────────────────
+
+export interface CxcCombRef {
+  _id:              string;
+  erpId:            string;
+  serie:            string;
+  folio:            string;
+  saldoActual:      number;
+  fechaVencimiento: string | null;
+}
+
+export interface CombinacionalOpcion {
+  cxcs:       CxcCombRef[];
+  sumaSaldos: number;
+  diferencia: number;
+  score:      number;
+}
+
+export interface CombinacionalDeposito {
+  _id:               string;
+  banco:             string;
+  fecha:             string;
+  concepto:          string;
+  deposito:          number;
+  capacidadRestante: number;
+  comprometido:      number;
+  referenciaNumerica: string | null;
+  categoria:         string | null;
+  folio:             string | null;
+}
+
+export interface CombinacionalResult {
+  deposito: CombinacionalDeposito;
+  opciones: CombinacionalOpcion[];
+}
+
+export interface CxcMatchesResponse {
+  individual:      CxcMatchResult[];
+  combinacionales: CombinacionalResult[];
+}
+
+export interface AuxClienteSummary {
+  _id:            string;   // auxNombre
+  movimientos:    number;
+  totalDepositos: number;
+  totalRetiros:   number;
+  bancos:         string[];
+  ultimaFecha:    string | null;
+}
+
+export interface AuxApplyResult {
+  limpiados:    number;
+  actualizados: number;
+  noEncontrados: number;
+  total:        number;
 }
 
 export interface UploadResult {
@@ -107,6 +227,10 @@ export class BankService {
     return this.api.patch(`/banks/movements/${id}/uuid`, { uuidXML });
   }
 
+  unlinkUuid(id: string): Observable<{ _id: string; uuidXML: null; status: BankStatus }> {
+    return this.api.delete(`/banks/movements/${id}/uuid`);
+  }
+
   addErpId(id: string, erpId: string): Observable<{ _id: string; erpIds: string[] }> {
     return this.api.patch(`/banks/movements/${id}/erp-ids`, { action: 'add', erpId });
   }
@@ -115,11 +239,39 @@ export class BankService {
     return this.api.patch(`/banks/movements/${id}/erp-ids`, { action: 'remove', erpId });
   }
 
+  setErpIds(id: string, erpIds: string[]): Observable<{ _id: string; erpIds: string[] }> {
+    return this.api.put(`/banks/movements/${id}/erp-ids`, { erpIds });
+  }
+
   getBankConfig(banco: string): Observable<BankConfig> {
     return this.api.get(`/banks/config/${banco}`);
   }
 
   saveBankConfig(banco: string, data: Partial<Pick<BankConfig, 'cuentaContable' | 'numeroCuenta'>>): Observable<BankConfig> {
     return this.api.patch(`/banks/config/${banco}`, data);
+  }
+
+  importAuxiliar(file: File): Observable<{ importados: number; actualizados: number; omitidos: number; errores: string[]; total: number }> {
+    return this.api.uploadFiles('/banks/auxiliar/import', [file], 'excelFile');
+  }
+
+  aplicarAuxiliar(): Observable<AuxApplyResult> {
+    return this.api.post('/banks/auxiliar/aplicar', {});
+  }
+
+  listAuxClientes(params?: Record<string, unknown>): Observable<AuxClienteSummary[]> {
+    return this.api.get('/banks/auxiliar/clientes', params);
+  }
+
+  listAuxMovimientos(params?: Record<string, unknown>): Observable<{ data: BankMovement[]; pagination: any }> {
+    return this.api.get('/banks/auxiliar/movimientos', params);
+  }
+
+  listErpCuentas(fechaDesde: string, fechaHasta: string): Observable<ErpCxC[]> {
+    return this.api.get('/erp/cuentas-pendientes', { fechaDesde, fechaHasta });
+  }
+
+  getCxcMatches(): Observable<CxcMatchesResponse> {
+    return this.api.get('/erp/cxc-matches');
   }
 }

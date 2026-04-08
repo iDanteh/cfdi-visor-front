@@ -3,10 +3,11 @@ import { FormBuilder, FormGroup } from '@angular/forms';
 import { merge, Subject } from 'rxjs';
 import { debounceTime, distinctUntilChanged, switchMap, takeUntil } from 'rxjs/operators';
 import {
-  BankService, BankMovement, BankCard, BankFilter, BankStatus,
+  BankService, BankMovement, BankCard, BankFilter, BankStatus, ErpCxC,
+  AuxClienteSummary, AuxApplyResult,
 } from '../../core/services/bank.service';
 
-type ViewMode  = 'cards' | 'detail';
+type ViewMode  = 'cards' | 'detail' | 'auxiliar';
 type SortDir   = 'asc' | 'desc';
 type SortField = 'fecha' | 'banco' | 'deposito' | 'retiro';
 
@@ -37,6 +38,25 @@ export class BanksComponent implements OnInit, OnDestroy {
   sortField: SortField = 'fecha';
   sortDir:   SortDir   = 'desc';
 
+  // ── Vista identificados por auxiliar ────────────────────────────────────────
+  auxClientes:         AuxClienteSummary[] = [];
+  auxClientesLoading   = false;
+  activeAuxCliente:    string | null = null;
+  auxMovements:        BankMovement[] = [];
+  auxMovPagination     = { total: 0, page: 1, limit: 50, pages: 0 };
+  auxMovLoading        = false;
+  applyingAux          = false;
+  applyAuxResult:      AuxApplyResult | null = null;
+  applyAuxError:       string | null = null;
+
+  // ── Modal auxiliar de cuentas ───────────────────────────────────────────────
+  showAuxModal       = false;
+  auxFile: File | null = null;
+  auxIsDragging      = false;
+  auxUploading       = false;
+  auxResult: { importados: number; actualizados: number; omitidos: number; errores: string[]; total: number } | null = null;
+  auxError: string | null = null;
+
   // ── Modal de importación ────────────────────────────────────────────────────
   showImportModal = false;
   importBanco     = '';
@@ -53,24 +73,59 @@ export class BanksComponent implements OnInit, OnDestroy {
   numeroCuentaInput = '';
   savingCuenta     = false;
 
-  // ── Modal UUID CFDI ─────────────────────────────────────────────────────────
+  // ── Modal UUID ──────────────────────────────────────────────────────────────
   showUuidModal     = false;
   uuidModalMovement: BankMovement | null = null;
   uuidInput         = '';
   savingUuid        = false;
   uuidError: string | null = null;
+  showLinkedPanel   = false;
+  unlinkingId: string | null = null;
 
   // ── Modal IDs ERP ────────────────────────────────────────────────────────────
-  showErpModal     = false;
+  showErpModal      = false;
   erpModalMovement: BankMovement | null = null;
-  erpInput         = '';
-  savingErp        = false;
+  erpSearch         = '';
+  erpCxcList:  ErpCxC[] = [];
+  erpLoading        = false;
+  erpError: string | null = null;
+  erpSaving         = false;
+  private erpIdsOriginal: string[] = [];
+
+  // Rango de fechas para consultar el ERP (por defecto: mes actual)
+  erpFechaDesde = this.defaultFechaDesde();
+  erpFechaHasta = this.defaultFechaHasta();
+
+  private defaultFechaDesde(): string {
+    const d = new Date();
+    d.setDate(1);
+    d.setHours(0, 0, 0, 0);
+    return d.toISOString().slice(0, 10) + 'T00:00:00Z';
+  }
+
+  private defaultFechaHasta(): string {
+    const d = new Date();
+    d.setHours(23, 59, 59, 999);
+    return d.toISOString().slice(0, 10) + 'T23:59:59Z';
+  }
+
+  get filteredCxC(): ErpCxC[] {
+    const q = this.erpSearch.toLowerCase().trim();
+    if (!q) return this.erpCxcList;
+    return this.erpCxcList.filter(c =>
+      c.id.toLowerCase().includes(q) ||
+      c.folio.toLowerCase().includes(q) ||
+      c.serie.toLowerCase().includes(q) ||
+      String(c.total).includes(q) ||
+      String(c.saldoActual).includes(q)
+    );
+  }
 
   // ── Catálogos ───────────────────────────────────────────────────────────────
   readonly bancos = ['BBVA', 'Banamex', 'Santander', 'Azteca'];
 
   readonly categorias = [
-    'Transferencia', 'Nómina', 'Depósito efectivo', 'Cheque',
+    'Transferencia', 'Nómina', 'Depósitos', 'Cheque', 'Compra', 'Pago cuenta de tercero',
     'Retiro ATM', 'Cargo bancario', 'Pago de servicio', 'Cobro tarjeta', 'Traspaso',
   ];
 
@@ -119,6 +174,17 @@ export class BanksComponent implements OnInit, OnDestroy {
     return this.bankCards.find(c => c.banco === this.activeBanco) ?? null;
   }
 
+  get saldoDinamico(): { label: string; amount: number } {
+    const c = this.activeCard;
+    if (!c) return { label: 'Saldo', amount: 0 };
+    switch (this.activeStatus) {
+      case 'no_identificado': return { label: 'No identificados', amount: c.saldoPendiente };
+      case 'identificado':    return { label: 'Identificados',    amount: c.saldoIdentificado };
+      case 'otros':           return { label: 'Otros',            amount: c.saldoOtros };
+      default:                return { label: 'Saldo total',      amount: c.totalDepositos - c.totalRetiros };
+    }
+  }
+
   // ── Ciclo de vida ───────────────────────────────────────────────────────────
 
   ngOnInit(): void {
@@ -150,6 +216,7 @@ export class BanksComponent implements OnInit, OnDestroy {
       debounceTime(0),
       takeUntil(this.destroy$),
     ).subscribe(() => this.loadMovements(1));
+
   }
 
   ngOnDestroy(): void {
@@ -260,6 +327,133 @@ export class BanksComponent implements OnInit, OnDestroy {
     return 'dot-gray';
   }
 
+  // ── Vista identificados por auxiliar ────────────────────────────────────────
+
+  openAuxView(): void {
+    this.view              = 'auxiliar';
+    this.activeAuxCliente  = null;
+    this.auxMovements      = [];
+    this.applyAuxResult    = null;
+    this.applyAuxError     = null;
+    this.loadAuxClientes();
+  }
+
+  goBackFromAux(): void {
+    if (this.activeAuxCliente !== null) {
+      this.activeAuxCliente = null;
+      this.auxMovements     = [];
+    } else {
+      this.view = 'cards';
+    }
+  }
+
+  loadAuxClientes(): void {
+    this.auxClientesLoading = true;
+    this.bankService.listAuxClientes().pipe(takeUntil(this.destroy$)).subscribe({
+      next: (list) => { this.auxClientes = list; this.auxClientesLoading = false; },
+      error: ()    => { this.auxClientesLoading = false; },
+    });
+  }
+
+  openAuxCliente(nombre: string): void {
+    this.activeAuxCliente = nombre;
+    this.auxMovLoading    = true;
+    this.auxMovements     = [];
+    this.loadAuxMovimientos(1);
+  }
+
+  loadAuxMovimientos(page = 1): void {
+    this.auxMovLoading = true;
+    this.bankService.listAuxMovimientos({
+      auxNombre: this.activeAuxCliente ?? undefined,
+      page,
+      limit: this.auxMovPagination.limit,
+    }).pipe(takeUntil(this.destroy$)).subscribe({
+      next: (res) => {
+        this.auxMovements    = res.data;
+        this.auxMovPagination = res.pagination;
+        this.auxMovLoading   = false;
+      },
+      error: () => { this.auxMovLoading = false; },
+    });
+  }
+
+  aplicarAuxiliar(): void {
+    if (this.applyingAux) return;
+    this.applyingAux   = true;
+    this.applyAuxResult = null;
+    this.applyAuxError  = null;
+    this.bankService.aplicarAuxiliar().pipe(takeUntil(this.destroy$)).subscribe({
+      next: (res) => {
+        this.applyAuxResult = res;
+        this.applyingAux    = false;
+        this.loadAuxClientes();
+      },
+      error: (err) => {
+        this.applyAuxError = err?.error?.error || 'Error al aplicar el catálogo';
+        this.applyingAux   = false;
+      },
+    });
+  }
+
+  get activeAuxClienteData(): AuxClienteSummary | null {
+    if (!this.activeAuxCliente) return null;
+    return this.auxClientes.find(c => c._id === this.activeAuxCliente) ?? null;
+  }
+
+  // ── Modal auxiliar de cuentas ───────────────────────────────────────────────
+
+  openAuxModal(): void {
+    this.auxFile      = null;
+    this.auxResult    = null;
+    this.auxError     = null;
+    this.auxIsDragging = false;
+    this.showAuxModal = true;
+  }
+
+  closeAuxModal(): void {
+    this.showAuxModal = false;
+  }
+
+  onAuxFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    this.setAuxFile(input.files?.[0] ?? null);
+  }
+
+  onAuxDrop(event: DragEvent): void {
+    event.preventDefault();
+    this.auxIsDragging = false;
+    const file = event.dataTransfer?.files[0];
+    if (file && /\.(xlsx|xls)$/i.test(file.name)) this.setAuxFile(file);
+  }
+
+  onAuxDragOver(event: DragEvent): void { event.preventDefault(); this.auxIsDragging = true; }
+  onAuxDragLeave(): void { this.auxIsDragging = false; }
+
+  private setAuxFile(file: File | null): void {
+    this.auxFile   = file;
+    this.auxResult = null;
+    this.auxError  = null;
+  }
+
+  uploadAuxiliar(): void {
+    if (!this.auxFile || this.auxUploading) return;
+    this.auxUploading = true;
+    this.auxError     = null;
+
+    this.bankService.importAuxiliar(this.auxFile).pipe(takeUntil(this.destroy$)).subscribe({
+      next: (res) => {
+        this.auxResult    = res;
+        this.auxUploading = false;
+        this.auxFile      = null;
+      },
+      error: (err) => {
+        this.auxError     = err?.error?.error || 'Error al procesar el archivo';
+        this.auxUploading = false;
+      },
+    });
+  }
+
   // ── Modal de importación ────────────────────────────────────────────────────
 
   openImportModal(): void {
@@ -359,19 +553,58 @@ export class BanksComponent implements OnInit, OnDestroy {
     this.uuidInput         = '';
     this.uuidError         = null;
     this.savingUuid        = false;
+    this.showLinkedPanel   = false;
+    this.unlinkingId       = null;
     this.showUuidModal     = true;
   }
 
   closeUuidModal(): void {
     this.showUuidModal     = false;
     this.uuidModalMovement = null;
+    this.showLinkedPanel   = false;
+    this.unlinkingId       = null;
+  }
+
+  // Movimientos del banco activo que ya tienen UUID vinculado
+  get linkedMovements(): BankMovement[] {
+    return this.movements.filter(m => !!m.uuidXML);
+  }
+
+  unlinkUuidFromRow(mov: BankMovement, event: Event): void {
+    event.stopPropagation();
+    if (this.unlinkingId === mov._id) return;
+    this.unlinkingId = mov._id;
+    this.bankService.unlinkUuid(mov._id).pipe(takeUntil(this.destroy$)).subscribe({
+      next: (res) => {
+        mov.uuidXML = res.uuidXML;
+        mov.status  = res.status;
+        this.unlinkingId = null;
+        this.loadCards();
+      },
+      error: () => { this.unlinkingId = null; },
+    });
+  }
+
+  unlinkUuidFromPanel(mov: BankMovement): void {
+    if (this.unlinkingId === mov._id) return;
+    this.unlinkingId = mov._id;
+    this.bankService.unlinkUuid(mov._id).pipe(takeUntil(this.destroy$)).subscribe({
+      next: (res) => {
+        mov.uuidXML = res.uuidXML;
+        mov.status  = res.status;
+        this.unlinkingId = null;
+        this.loadCards();
+      },
+      error: () => { this.unlinkingId = null; },
+    });
   }
 
   confirmUuid(): void {
-    if (!this.uuidModalMovement || !this.uuidInput.trim() || this.savingUuid) return;
+    const uuid = this.uuidInput.trim();
+    if (!this.uuidModalMovement || !uuid || this.savingUuid) return;
     this.savingUuid = true;
     this.uuidError  = null;
-    this.bankService.setUuidXML(this.uuidModalMovement._id, this.uuidInput.trim())
+    this.bankService.setUuidXML(this.uuidModalMovement._id, uuid)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (res) => {
@@ -379,6 +612,7 @@ export class BanksComponent implements OnInit, OnDestroy {
           this.uuidModalMovement!.status  = res.status;
           this.savingUuid = false;
           this.closeUuidModal();
+          this.loadCards();
         },
         error: (err) => {
           this.uuidError  = err?.error?.error || 'Error al vincular UUID';
@@ -391,39 +625,84 @@ export class BanksComponent implements OnInit, OnDestroy {
 
   openErpModal(mov: BankMovement, event: Event): void {
     event.stopPropagation();
-    this.erpModalMovement = mov;
-    this.erpInput         = '';
-    this.savingErp        = false;
-    this.showErpModal     = true;
+    this.erpModalMovement  = mov;
+    this.erpIdsOriginal    = [...(mov.erpIds ?? [])];
+    this.erpSearch         = '';
+    this.erpSaving         = false;
+    this.showErpModal      = true;
+    this.loadErpCuentas();
   }
 
   closeErpModal(): void {
+    // Revert local changes if not confirmed
+    if (this.erpModalMovement) {
+      this.erpModalMovement.erpIds = [...this.erpIdsOriginal];
+    }
     this.showErpModal     = false;
     this.erpModalMovement = null;
+    this.erpCxcList       = [];
+    this.erpError         = null;
+    this.erpSaving        = false;
   }
 
-  addErpId(): void {
-    if (!this.erpModalMovement || !this.erpInput.trim() || this.savingErp) return;
-    this.savingErp = true;
-    this.bankService.addErpId(this.erpModalMovement._id, this.erpInput.trim())
+  confirmErp(): void {
+    if (!this.erpModalMovement || this.erpSaving) return;
+    this.erpSaving = true;
+    const ids = [...(this.erpModalMovement.erpIds ?? [])];
+    this.bankService.setErpIds(this.erpModalMovement._id, ids)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (res) => {
           this.erpModalMovement!.erpIds = res.erpIds;
-          this.erpInput  = '';
-          this.savingErp = false;
+          this.erpIdsOriginal           = [...res.erpIds];
+          this.erpSaving                = false;
+          this.showErpModal             = false;
+          this.erpModalMovement         = null;
+          this.erpCxcList               = [];
         },
-        error: () => { this.savingErp = false; },
+        error: () => { this.erpSaving = false; },
       });
+  }
+
+  loadErpCuentas(): void {
+    this.erpLoading = true;
+    this.erpError   = null;
+    this.bankService.listErpCuentas(this.erpFechaDesde, this.erpFechaHasta)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (list) => { this.erpCxcList = list; this.erpLoading = false; },
+        error: (err) => {
+          this.erpError   = err?.error?.error || 'Error al consultar el ERP';
+          this.erpLoading = false;
+        },
+      });
+  }
+
+  isCxCLinked(id: string): boolean {
+    return (this.erpModalMovement?.erpIds ?? []).includes(id);
+  }
+
+  toggleCxC(id: string): void {
+    if (!this.erpModalMovement) return;
+    const ids = this.erpModalMovement.erpIds ?? [];
+    if (ids.includes(id)) {
+      this.erpModalMovement.erpIds = ids.filter(x => x !== id);
+    } else {
+      this.erpModalMovement.erpIds = [...ids, id];
+    }
+  }
+
+  unlinkCxC(id: string, event: Event): void {
+    event.stopPropagation();
+    if (!this.erpModalMovement) return;
+    this.erpModalMovement.erpIds = (this.erpModalMovement.erpIds ?? []).filter(x => x !== id);
   }
 
   removeErpId(mov: BankMovement, erpId: string, event: Event): void {
     event.stopPropagation();
-    this.bankService.removeErpId(mov._id, erpId)
-      .pipe(takeUntil(this.destroy$))
-      .subscribe({
-        next: (res) => { mov.erpIds = res.erpIds; },
-      });
+    this.bankService.removeErpId(mov._id, erpId).pipe(takeUntil(this.destroy$)).subscribe({
+      next: (res) => { mov.erpIds = res.erpIds; },
+    });
   }
 
   // ── Status inline ───────────────────────────────────────────────────────────
@@ -433,7 +712,7 @@ export class BanksComponent implements OnInit, OnDestroy {
     const order: BankStatus[] = ['no_identificado', 'identificado', 'otros'];
     const next = order[(order.indexOf(mov.status) + 1) % order.length];
     this.bankService.updateStatus(mov._id, next).pipe(takeUntil(this.destroy$)).subscribe({
-      next: (res) => { mov.status = res.status; },
+      next: (res) => { mov.status = res.status; this.loadCards(); },
     });
   }
 

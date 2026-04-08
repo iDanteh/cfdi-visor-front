@@ -1,0 +1,719 @@
+<div class="em-page">
+
+  <!-- ══ HEADER ══════════════════════════════════════════════════════════════ -->
+  <div class="em-header">
+    <div>
+      <h1 class="em-title">CxC vs Movimientos bancarios</h1>
+      <p class="em-subtitle">
+        Vista exploratoria · Depósitos sin UUID · Matching individual y combinacional (N CxC por depósito)
+      </p>
+    </div>
+    <button class="btn-refresh" (click)="load()" [disabled]="loading">
+      <svg width="14" height="14" viewBox="0 0 20 20" fill="none"
+           stroke="currentColor" stroke-width="2.2" [class.spin]="loading">
+        <path d="M4 4a8 8 0 0113 6M16 16a8 8 0 01-13-6"/>
+        <path d="M1 4l3 3 3-3M16 13l3 3 3-3"/>
+      </svg>
+      Actualizar
+    </button>
+  </div>
+
+  <!-- ══ STATS ════════════════════════════════════════════════════════════════ -->
+  <div class="em-stats" *ngIf="!loading && individual.length > 0">
+    <div class="em-stat">
+      <span class="em-stat-val">{{ stats.total }}</span>
+      <span class="em-stat-lbl">CxC en snapshot</span>
+    </div>
+    <div class="em-stat em-stat-purple">
+      <span class="em-stat-val">{{ stats.altaConf }}</span>
+      <span class="em-stat-lbl">Alta confianza (≥ 90 %)</span>
+    </div>
+    <div class="em-stat em-stat-green">
+      <span class="em-stat-val">{{ stats.conMatch }}</span>
+      <span class="em-stat-lbl">Con posible match</span>
+    </div>
+    <div class="em-stat em-stat-gray">
+      <span class="em-stat-val">{{ stats.sinMatch }}</span>
+      <span class="em-stat-lbl">Sin match individual</span>
+    </div>
+    <div class="em-stat em-stat-teal" *ngIf="stats.combCount > 0">
+      <span class="em-stat-val">{{ stats.combCount }}</span>
+      <span class="em-stat-lbl">Combinacionales (N CxC)</span>
+    </div>
+    <div class="em-stat em-stat-amber" *ngIf="stats.conConflicto > 0">
+      <span class="em-stat-val">{{ stats.conConflicto }}</span>
+      <span class="em-stat-lbl">Con conflicto</span>
+    </div>
+    <div class="em-stat em-stat-blue">
+      <span class="em-stat-val">{{ stats.vinculados }}</span>
+      <span class="em-stat-lbl">Ya vinculadas</span>
+    </div>
+  </div>
+
+  <!-- ══ FILTROS ══════════════════════════════════════════════════════════════ -->
+  <div class="em-filters" *ngIf="!loading && individual.length > 0">
+
+    <select class="em-sel" [(ngModel)]="filterVinculado">
+      <option value="all">Todas las CxC</option>
+      <option value="vinculado">Ya vinculadas</option>
+      <option value="no_vinculado">No vinculadas</option>
+    </select>
+
+    <select class="em-sel" [(ngModel)]="filterConMatch">
+      <option value="all">Con y sin match</option>
+      <option value="con_match">Solo con match</option>
+      <option value="sin_match">Solo sin match</option>
+    </select>
+
+    <select class="em-sel" [(ngModel)]="filterConflicto">
+      <option value="all">Todos los conflictos</option>
+      <option value="con_conflicto">Con conflicto</option>
+      <option value="sin_conflicto">Sin conflicto</option>
+    </select>
+
+    <div class="score-filter">
+      <label class="score-filter-lbl">Score mín. {{ filterMinScore }}%</label>
+      <input type="range" min="0" max="100" step="5"
+             [(ngModel)]="filterMinScore" class="score-slider">
+    </div>
+
+    <span class="em-count">{{ filtered.length }} registros</span>
+  </div>
+
+  <!-- ══ LOADING / ERROR / EMPTY ══════════════════════════════════════════════ -->
+  <div *ngIf="loading" class="em-loading">
+    <div class="spinner"></div>
+    <span>Calculando matches…</span>
+  </div>
+
+  <div *ngIf="error" class="em-error">
+    <svg width="16" height="16" viewBox="0 0 20 20" fill="none"
+         stroke="#b91c1c" stroke-width="2">
+      <circle cx="10" cy="10" r="9"/><path d="M10 6v4M10 14h.01"/>
+    </svg>
+    {{ error }}
+  </div>
+
+  <div *ngIf="!loading && !error && individual.length === 0" class="em-empty">
+    <div class="em-empty-icon">📭</div>
+    <div class="em-empty-title">Sin datos en el snapshot</div>
+    <div class="em-empty-sub">
+      Consulta el ERP desde el módulo de Bancos para cargar las CxC pendientes
+    </div>
+  </div>
+
+  <!-- ══ SECCIÓN 1: MATCHES INDIVIDUALES (1 depósito ↔ 1 CxC) ════════════════ -->
+  <div *ngIf="!loading && !error && filtered.length > 0">
+
+    <h2 class="section-title">Matches individuales</h2>
+
+    <div class="em-table-wrap">
+      <table class="em-table">
+        <thead>
+          <tr>
+            <th>CxC (Serie/Folio)</th>
+            <th class="th-right">Saldo actual</th>
+            <th>Vencimiento</th>
+            <th>Vinculada</th>
+            <th>Matches</th>
+            <th>Mejor match</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <ng-container *ngFor="let r of filtered">
+
+            <!-- Fila principal -->
+            <tr class="em-row"
+                [class.em-row-expanded]="isExpanded(r.cxc._id)"
+                [class.em-row-vinculated]="r.cxc.is_vinculated"
+                [class.em-row-conflict]="rowHasConflict(r.matches)"
+                (click)="toggle(r.cxc._id)">
+
+              <td>
+                <div class="cxc-id">
+                  <div class="cxc-top">
+                    <span class="cxc-folio">{{ r.cxc.serie }}-{{ r.cxc.folio }}</span>
+                    <span *ngIf="rowHasConflict(r.matches)" class="conflict-flag"
+                          title="Un depósito coincide con esta y otra CxC por monto puro">
+                      ⚠ Conflicto
+                    </span>
+                  </div>
+                  <span class="cxc-erpid">{{ r.cxc.erpId }}</span>
+                </div>
+              </td>
+
+              <td class="td-right">
+                <span [class.saldo-bajo]="r.cxc.saldoActual < r.cxc.total">
+                  {{ r.cxc.saldoActual | currency:'MXN':'symbol':'1.2-2' }}
+                </span>
+              </td>
+
+              <td>
+                <span *ngIf="r.cxc.fechaVencimiento" class="fecha-chip">
+                  {{ r.cxc.fechaVencimiento | date:'dd/MM/yyyy' }}
+                </span>
+                <span *ngIf="!r.cxc.fechaVencimiento" class="td-dash">—</span>
+              </td>
+
+              <td>
+                <span class="vinc-badge" [class.vinc-si]="r.cxc.is_vinculated"
+                      [class.vinc-no]="!r.cxc.is_vinculated">
+                  {{ r.cxc.is_vinculated ? 'Sí' : 'No' }}
+                </span>
+              </td>
+
+              <td>
+                <span *ngIf="visibleMatches(r.matches).length > 0"
+                      class="match-count match-count-pos">
+                  {{ visibleMatches(r.matches).length }}
+                  posible{{ visibleMatches(r.matches).length !== 1 ? 's' : '' }}
+                </span>
+                <span *ngIf="visibleMatches(r.matches).length === 0"
+                      class="match-count match-count-none">Sin match</span>
+              </td>
+
+              <td>
+                <ng-container *ngIf="bestMatch(r.matches) as bm">
+                  <div class="best-match">
+                    <span class="best-banco">{{ bm.banco }}</span>
+                    <span class="best-date">{{ bm.fecha | date:'dd/MM/yy' }}</span>
+                    <span class="match-badge" [ngClass]="matchTypeClass(bm.matchType)">
+                      {{ matchTypeLabel(bm.matchType) }}
+                    </span>
+                    <span *ngIf="bm.esConflicto" class="conflict-mini">⚠</span>
+                    <div class="score-bar-wrap">
+                      <div class="score-bar" [style.width.%]="scoreBar(bm.score)"
+                           [class.score-bar-high]="bm.score >= 0.9"
+                           [class.score-bar-mid]="bm.score >= 0.7 && bm.score < 0.9"
+                           [class.score-bar-low]="bm.score < 0.7"></div>
+                    </div>
+                    <span class="score-pct">{{ scoreBar(bm.score) }}%</span>
+                  </div>
+                </ng-container>
+                <span *ngIf="!bestMatch(r.matches)" class="td-dash">—</span>
+              </td>
+
+              <td class="td-chevron">
+                <svg width="13" height="13" viewBox="0 0 20 20" fill="none"
+                     stroke="currentColor" stroke-width="2.5"
+                     [class.chevron-down]="isExpanded(r.cxc._id)">
+                  <path d="M5 8l5 5 5-5"/>
+                </svg>
+              </td>
+
+            </tr>
+
+            <!-- Detalle expandido -->
+            <tr *ngIf="isExpanded(r.cxc._id)" class="em-detail-row">
+              <td colspan="7">
+                <div class="em-detail">
+
+                  <div *ngIf="visibleMatches(r.matches).length === 0" class="detail-empty">
+                    Ningún depósito bancario candidato coincide con el saldo actual de esta CxC
+                    ({{ r.cxc.saldoActual | currency:'MXN':'symbol':'1.2-2' }}) con score ≥ {{ filterMinScore }}%.
+                  </div>
+
+                  <table *ngIf="visibleMatches(r.matches).length > 0" class="match-table">
+                    <thead>
+                      <tr>
+                        <th>Banco</th>
+                        <th>Fecha</th>
+                        <th class="th-center">Días venc.</th>
+                        <th>Concepto</th>
+                        <th>Ref. numérica</th>
+                        <th>Categoría</th>
+                        <th class="th-right">Depósito total</th>
+                        <th class="th-right">Capacidad restante</th>
+                        <th class="th-right">Diferencia</th>
+                        <th>Tipo</th>
+                        <th>Score</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr *ngFor="let m of visibleMatches(r.matches)"
+                          class="match-row"
+                          [class.match-row-top]="m.score >= 0.9 && !m.esConflicto"
+                          [class.match-row-conflict]="m.esConflicto">
+
+                        <td>
+                          <span class="banco-chip">{{ m.banco }}</span>
+                        </td>
+
+                        <td class="td-date">{{ m.fecha | date:'dd/MM/yyyy' }}</td>
+
+                        <td class="td-center">
+                          <span class="days-chip" [ngClass]="daysClass(m.daysFromVenc)">
+                            {{ daysLabel(m.daysFromVenc) }}
+                          </span>
+                        </td>
+
+                        <td class="td-concepto" [title]="m.concepto">
+                          <span class="concepto-text">{{ m.concepto }}</span>
+                        </td>
+
+                        <td>
+                          <span *ngIf="m.referenciaNumerica" class="ref-chip">
+                            {{ m.referenciaNumerica }}
+                          </span>
+                          <span *ngIf="!m.referenciaNumerica" class="td-dash">—</span>
+                        </td>
+
+                        <td>
+                          <span *ngIf="m.categoria" class="cat-chip">{{ m.categoria }}</span>
+                          <span *ngIf="!m.categoria" class="td-dash">—</span>
+                        </td>
+
+                        <td class="td-right amount-dep">
+                          {{ m.deposito | currency:'MXN':'symbol':'1.2-2' }}
+                          <span *ngIf="m.comprometido > 0" class="comprometido-badge"
+                                [title]="'Comprometido: ' + (m.comprometido | currency:'MXN':'symbol':'1.2-2')">
+                            −{{ m.comprometido | currency:'MXN':'symbol':'1.2-2' }}
+                          </span>
+                        </td>
+
+                        <td class="td-right">
+                          <span class="capacidad-val"
+                                [class.capacidad-parcial]="m.comprometido > 0">
+                            {{ m.capacidadRestante | currency:'MXN':'symbol':'1.2-2' }}
+                          </span>
+                        </td>
+
+                        <td class="td-right">
+                          <span class="dif-chip" [class.dif-ok]="m.diferencia <= 1">
+                            {{ m.diferencia | currency:'MXN':'symbol':'1.2-2' }}
+                          </span>
+                        </td>
+
+                        <td>
+                          <div class="type-cell">
+                            <span class="match-badge" [ngClass]="matchTypeClass(m.matchType)">
+                              {{ matchTypeLabel(m.matchType) }}
+                            </span>
+                            <span *ngIf="m.esConflicto" class="conflict-badge"
+                                  title="Este depósito también coincide con otra CxC por monto puro">
+                              ⚠ Conflicto
+                            </span>
+                          </div>
+                        </td>
+
+                        <td>
+                          <div class="score-cell">
+                            <div class="score-bar-wrap">
+                              <div class="score-bar"
+                                   [style.width.%]="scoreBar(m.score)"
+                                   [class.score-bar-high]="m.score >= 0.9"
+                                   [class.score-bar-mid]="m.score >= 0.7 && m.score < 0.9"
+                                   [class.score-bar-low]="m.score < 0.7"></div>
+                            </div>
+                            <span class="score-pct">{{ scoreBar(m.score) }}%</span>
+                          </div>
+                        </td>
+
+                      </tr>
+                    </tbody>
+                  </table>
+
+                </div>
+              </td>
+            </tr>
+
+          </ng-container>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ══ SECCIÓN 2: MATCHES COMBINACIONALES (1 depósito ↔ N CxC) ═══════════════ -->
+  <div *ngIf="!loading && !error && combinacionales.length > 0" class="comb-section">
+
+    <h2 class="section-title">
+      Matches combinacionales
+      <span class="section-subtitle">
+        Un depósito cubre 2–4 CxC · Sin match de texto identificatorio
+      </span>
+    </h2>
+
+    <div class="em-table-wrap">
+      <table class="em-table">
+        <thead>
+          <tr>
+            <th>Depósito</th>
+            <th>Banco</th>
+            <th>Fecha</th>
+            <th class="th-right">Monto total</th>
+            <th class="th-right">Capacidad</th>
+            <th>Categoría</th>
+            <th>Opciones</th>
+            <th>Mejor opción (CxCs)</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <ng-container *ngFor="let cr of combinacionales">
+
+            <!-- Fila principal combinacional -->
+            <tr class="em-row"
+                [class.em-row-expanded]="isDepExpanded(cr.deposito._id)"
+                (click)="toggleDep(cr.deposito._id)">
+
+              <td>
+                <div class="dep-id">
+                  <span class="dep-concepto" [title]="cr.deposito.concepto">
+                    {{ cr.deposito.concepto | slice:0:40 }}{{ cr.deposito.concepto.length > 40 ? '…' : '' }}
+                  </span>
+                  <span *ngIf="cr.deposito.referenciaNumerica" class="ref-chip">
+                    {{ cr.deposito.referenciaNumerica }}
+                  </span>
+                </div>
+              </td>
+
+              <td><span class="banco-chip">{{ cr.deposito.banco }}</span></td>
+
+              <td class="td-date">{{ cr.deposito.fecha | date:'dd/MM/yyyy' }}</td>
+
+              <td class="td-right amount-dep">
+                {{ cr.deposito.deposito | currency:'MXN':'symbol':'1.2-2' }}
+              </td>
+
+              <td class="td-right">
+                <span class="capacidad-val"
+                      [class.capacidad-parcial]="cr.deposito.comprometido > 0">
+                  {{ cr.deposito.capacidadRestante | currency:'MXN':'symbol':'1.2-2' }}
+                </span>
+              </td>
+
+              <td>
+                <span *ngIf="cr.deposito.categoria" class="cat-chip">{{ cr.deposito.categoria }}</span>
+                <span *ngIf="!cr.deposito.categoria" class="td-dash">—</span>
+              </td>
+
+              <td>
+                <span class="match-count match-count-comb">
+                  {{ cr.opciones.length }} opción{{ cr.opciones.length !== 1 ? 'es' : '' }}
+                </span>
+              </td>
+
+              <td>
+                <ng-container *ngIf="bestOpcion(cr.opciones) as bo">
+                  <div class="best-comb">
+                    <div class="comb-cxcs">
+                      <span *ngFor="let c of bo.cxcs" class="cxc-tag">
+                        {{ c.serie }}-{{ c.folio }}
+                        <span class="cxc-tag-amount">
+                          ({{ c.saldoActual | currency:'MXN':'symbol':'1.2-2' }})
+                        </span>
+                      </span>
+                    </div>
+                    <div class="comb-meta">
+                      <span class="comb-sum">
+                        Σ {{ bo.sumaSaldos | currency:'MXN':'symbol':'1.2-2' }}
+                      </span>
+                      <span class="dif-chip" [class.dif-ok]="bo.diferencia <= 1">
+                        Δ {{ bo.diferencia | currency:'MXN':'symbol':'1.2-2' }}
+                      </span>
+                      <div class="score-bar-wrap">
+                        <div class="score-bar" [style.width.%]="scoreBar(bo.score)"
+                             [ngClass]="combScoreClass(bo.score)"></div>
+                      </div>
+                      <span class="score-pct">{{ scoreBar(bo.score) }}%</span>
+                    </div>
+                  </div>
+                </ng-container>
+              </td>
+
+              <td class="td-chevron">
+                <svg width="13" height="13" viewBox="0 0 20 20" fill="none"
+                     stroke="currentColor" stroke-width="2.5"
+                     [class.chevron-down]="isDepExpanded(cr.deposito._id)">
+                  <path d="M5 8l5 5 5-5"/>
+                </svg>
+              </td>
+
+            </tr>
+
+            <!-- Detalle expandido combinacional -->
+            <tr *ngIf="isDepExpanded(cr.deposito._id)" class="em-detail-row">
+              <td colspan="9">
+                <div class="em-detail">
+                  <div class="comb-detail-header">
+                    <span class="comb-detail-title">
+                      Concepto completo:
+                    </span>
+                    <span class="comb-detail-concepto">{{ cr.deposito.concepto }}</span>
+                  </div>
+
+                  <table class="comb-table">
+                    <thead>
+                      <tr>
+                        <th>#</th>
+                        <th>CxCs incluidas</th>
+                        <th class="th-right">Suma saldos</th>
+                        <th class="th-right">Diferencia</th>
+                        <th>Score</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr *ngFor="let op of cr.opciones; let i = index"
+                          class="comb-row"
+                          [class.comb-row-top]="i === 0">
+
+                        <td class="td-center comb-rank">{{ i + 1 }}</td>
+
+                        <td>
+                          <div class="comb-cxcs-detail">
+                            <div *ngFor="let c of op.cxcs" class="cxc-detail-row">
+                              <span class="cxc-tag">{{ c.serie }}-{{ c.folio }}</span>
+                              <span class="cxc-erpid-sm">{{ c.erpId }}</span>
+                              <span class="cxc-saldo">
+                                {{ c.saldoActual | currency:'MXN':'symbol':'1.2-2' }}
+                              </span>
+                              <span *ngIf="c.fechaVencimiento" class="fecha-chip-sm">
+                                Vence {{ c.fechaVencimiento | date:'dd/MM/yy' }}
+                              </span>
+                            </div>
+                          </div>
+                        </td>
+
+                        <td class="td-right">
+                          <span class="comb-sum">
+                            {{ op.sumaSaldos | currency:'MXN':'symbol':'1.2-2' }}
+                          </span>
+                        </td>
+
+                        <td class="td-right">
+                          <span class="dif-chip" [class.dif-ok]="op.diferencia <= 1">
+                            {{ op.diferencia | currency:'MXN':'symbol':'1.2-2' }}
+                          </span>
+                        </td>
+
+                        <td>
+                          <div class="score-cell">
+                            <div class="score-bar-wrap">
+                              <div class="score-bar"
+                                   [style.width.%]="scoreBar(op.score)"
+                                   [ngClass]="combScoreClass(op.score)"></div>
+                            </div>
+                            <span class="score-pct">{{ scoreBar(op.score) }}%</span>
+                          </div>
+                        </td>
+
+                      </tr>
+                    </tbody>
+                  </table>
+
+                </div>
+              </td>
+            </tr>
+
+          </ng-container>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<style>
+/* ── Página ─────────────────────────────────────────────── */
+.em-page { padding: 1.5rem 2rem; max-width: 1500px; margin: 0 auto; font-family: inherit; }
+
+/* ── Header ─────────────────────────────────────────────── */
+.em-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem; }
+.em-title   { font-size: 1.25rem; font-weight: 700; color: #0f172a; margin: 0 0 0.2rem; }
+.em-subtitle { font-size: 0.78rem; color: #64748b; margin: 0; }
+.btn-refresh { display: flex; align-items: center; gap: 0.4rem; padding: 0.45rem 0.9rem;
+  background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 0.8rem;
+  color: #475569; cursor: pointer; transition: background 0.15s; }
+.btn-refresh:hover:not(:disabled) { background: #f1f5f9; }
+.btn-refresh:disabled { opacity: 0.5; cursor: default; }
+@keyframes rotate { to { transform: rotate(360deg); } }
+.spin { animation: rotate 0.8s linear infinite; }
+
+/* ── Section titles ──────────────────────────────────────── */
+.section-title { font-size: 1rem; font-weight: 700; color: #1e293b;
+  margin: 1.5rem 0 0.75rem; display: flex; align-items: center; gap: 0.75rem; }
+.section-subtitle { font-size: 0.73rem; font-weight: 400; color: #94a3b8; }
+.comb-section { margin-top: 0.5rem; }
+
+/* ── Stats ──────────────────────────────────────────────── */
+.em-stats { display: flex; gap: 0.75rem; margin-bottom: 1.25rem; flex-wrap: wrap; }
+.em-stat { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;
+  padding: 0.65rem 1rem; display: flex; flex-direction: column; gap: 0.1rem; }
+.em-stat-green  { border-color: #bbf7d0; background: #f0fdf4; }
+.em-stat-gray   { border-color: #e2e8f0; }
+.em-stat-blue   { border-color: #bfdbfe; background: #eff6ff; }
+.em-stat-amber  { border-color: #fde68a; background: #fffbeb; }
+.em-stat-purple { border-color: #ddd6fe; background: #faf5ff; }
+.em-stat-teal   { border-color: #99f6e4; background: #f0fdfa; }
+.em-stat-val    { font-size: 1.4rem; font-weight: 700; color: #0f172a; line-height: 1; }
+.em-stat-lbl    { font-size: 0.7rem; color: #64748b; }
+
+/* ── Filtros ─────────────────────────────────────────────── */
+.em-filters { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap; }
+.em-sel { padding: 0.35rem 0.6rem; border: 1px solid #e2e8f0; border-radius: 6px;
+  font-size: 0.8rem; color: #374151; background: #fff; cursor: pointer; }
+.score-filter { display: flex; align-items: center; gap: 0.5rem; }
+.score-filter-lbl { font-size: 0.78rem; color: #475569; white-space: nowrap; }
+.score-slider { width: 110px; accent-color: #6366f1; cursor: pointer; }
+.em-count { font-size: 0.78rem; color: #94a3b8; margin-left: auto; }
+
+/* ── Estados ─────────────────────────────────────────────── */
+.em-loading { display: flex; align-items: center; gap: 0.75rem; padding: 3rem;
+  justify-content: center; color: #64748b; }
+.spinner { width: 20px; height: 20px; border: 2.5px solid #e2e8f0; border-top-color: #6366f1;
+  border-radius: 50%; animation: rotate 0.7s linear infinite; }
+.em-error  { display: flex; align-items: center; gap: 0.5rem; padding: 0.9rem 1rem;
+  background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px;
+  color: #b91c1c; font-size: 0.85rem; }
+.em-empty  { text-align: center; padding: 4rem 2rem; }
+.em-empty-icon  { font-size: 2.5rem; margin-bottom: 0.75rem; }
+.em-empty-title { font-size: 1rem; font-weight: 600; color: #374151; }
+.em-empty-sub   { font-size: 0.82rem; color: #94a3b8; margin-top: 0.35rem; }
+
+/* ── Tabla principal ─────────────────────────────────────── */
+.em-table-wrap { border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; }
+.em-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+.em-table thead tr { background: #f8fafc; }
+.em-table th { padding: 0.6rem 0.9rem; text-align: left; font-weight: 600; color: #64748b;
+  font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.03em;
+  border-bottom: 1px solid #e2e8f0; }
+.th-right  { text-align: right; }
+.th-center { text-align: center; }
+.em-row { cursor: pointer; transition: background 0.1s; }
+.em-row:hover { background: #f8fafc; }
+.em-row td { padding: 0.65rem 0.9rem; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+.em-row-expanded td { background: #fafbff; border-bottom: none; }
+.em-row-vinculated td { opacity: 0.65; }
+.em-row-conflict td:first-child { border-left: 3px solid #f59e0b; }
+.td-right  { text-align: right; }
+.td-center { text-align: center; }
+.td-dash   { color: #cbd5e1; }
+.td-chevron { text-align: right; color: #94a3b8; }
+.chevron-down { transform: rotate(180deg); transition: transform 0.2s; }
+
+/* ── CxC cells ──────────────────────────────────────────── */
+.cxc-id    { display: flex; flex-direction: column; gap: 0.1rem; }
+.cxc-top   { display: flex; align-items: center; gap: 0.5rem; }
+.cxc-folio { font-weight: 600; color: #1e293b; }
+.cxc-erpid { font-size: 0.7rem; color: #94a3b8; }
+.saldo-bajo { color: #d97706; }
+.fecha-chip { font-size: 0.78rem; color: #475569; }
+.vinc-badge { font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 20px; }
+.vinc-si { background: #d1fae5; color: #065f46; }
+.vinc-no { background: #f1f5f9; color: #64748b; }
+.match-count      { font-size: 0.75rem; font-weight: 600; padding: 0.15rem 0.55rem; border-radius: 20px; }
+.match-count-pos  { background: #dbeafe; color: #1d4ed8; }
+.match-count-none { background: #f1f5f9; color: #94a3b8; }
+.match-count-comb { background: #ccfbf1; color: #0f766e; }
+
+/* ── Depósito (combinacional) ────────────────────────────── */
+.dep-id       { display: flex; flex-direction: column; gap: 0.1rem; }
+.dep-concepto { font-size: 0.8rem; color: #1e293b; }
+
+/* ── Conflicto ──────────────────────────────────────────── */
+.conflict-flag  { font-size: 0.67rem; font-weight: 700; color: #92400e;
+  background: #fef3c7; border: 1px solid #fde68a; padding: 0.1rem 0.4rem; border-radius: 4px; }
+.conflict-mini  { font-size: 0.75rem; color: #f59e0b; }
+.conflict-badge { font-size: 0.67rem; font-weight: 700; color: #92400e;
+  background: #fef3c7; border: 1px solid #fde68a; padding: 0.1rem 0.35rem; border-radius: 4px; }
+.match-row-conflict { background: #fffbeb; }
+.match-row-conflict td { border-bottom-color: #fde68a; }
+
+/* ── Mejor match preview ────────────────────────────────── */
+.best-match { display: flex; align-items: center; gap: 0.4rem; flex-wrap: nowrap; }
+.best-banco { font-weight: 600; font-size: 0.78rem; color: #1e293b; }
+.best-date  { font-size: 0.72rem; color: #64748b; }
+
+/* ── Mejor combinación preview ──────────────────────────── */
+.best-comb { display: flex; flex-direction: column; gap: 0.3rem; }
+.comb-cxcs { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.comb-meta { display: flex; align-items: center; gap: 0.4rem; }
+.comb-sum  { font-size: 0.75rem; font-weight: 600; color: #0f766e;
+  background: #ccfbf1; padding: 0.1rem 0.4rem; border-radius: 4px; }
+.cxc-tag   { font-size: 0.7rem; font-weight: 600; padding: 0.1rem 0.4rem;
+  background: #ede9fe; color: #6d28d9; border-radius: 4px; display: inline-flex; gap: 0.2rem; }
+.cxc-tag-amount { font-weight: 400; color: #7c3aed; }
+
+/* ── Score bar ──────────────────────────────────────────── */
+.score-bar-wrap { width: 50px; height: 5px; background: #e2e8f0; border-radius: 99px; overflow: hidden; }
+.score-bar      { height: 100%; border-radius: 99px; transition: width 0.3s; }
+.score-bar-high { background: #16a34a; }
+.score-bar-mid  { background: #6366f1; }
+.score-bar-low  { background: #f59e0b; }
+.score-pct      { font-size: 0.7rem; color: #475569; min-width: 2.5rem; }
+
+/* ── Match badges ───────────────────────────────────────── */
+.match-badge { font-size: 0.68rem; font-weight: 600; padding: 0.12rem 0.45rem;
+  border-radius: 20px; white-space: nowrap; }
+.badge-exact  { background: #d1fae5; color: #065f46; }
+.badge-close  { background: #fef9c3; color: #92400e; }
+.badge-folio  { background: #ede9fe; color: #6d28d9; }
+.badge-ref    { background: #dbeafe; color: #1d4ed8; }
+.badge-auth   { background: #fce7f3; color: #9d174d; }
+
+/* ── Detalle expandido ──────────────────────────────────── */
+.em-detail-row td { padding: 0; border-bottom: 1px solid #e2e8f0; }
+.em-detail { padding: 1rem 1.25rem 1.25rem; background: #f8fafc; }
+.detail-empty { font-size: 0.82rem; color: #94a3b8; padding: 0.5rem 0; }
+
+/* ── Tabla interna de matches individuales ──────────────── */
+.match-table { width: 100%; border-collapse: collapse; font-size: 0.79rem;
+  background: #fff; border-radius: 8px; overflow: hidden; border: 1px solid #e2e8f0; }
+.match-table th { padding: 0.45rem 0.7rem; text-align: left; font-weight: 600;
+  color: #64748b; font-size: 0.68rem; text-transform: uppercase;
+  background: #f1f5f9; border-bottom: 1px solid #e2e8f0; }
+.match-row td  { padding: 0.5rem 0.7rem; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+.match-row:last-child td { border-bottom: none; }
+.match-row-top { background: #f0fdf4; }
+.score-cell { display: flex; align-items: center; gap: 0.4rem; }
+.type-cell  { display: flex; align-items: center; gap: 0.3rem; flex-wrap: wrap; }
+.banco-chip { font-size: 0.7rem; font-weight: 600; padding: 0.1rem 0.4rem;
+  background: #eff6ff; color: #1d4ed8; border-radius: 4px; }
+.td-date    { white-space: nowrap; color: #475569; }
+.td-concepto { max-width: 200px; }
+.concepto-text { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 190px; }
+.amount-dep { color: #16a34a; font-weight: 600; }
+.dif-chip   { font-size: 0.72rem; padding: 0.1rem 0.4rem; border-radius: 4px;
+  background: #fef9c3; color: #92400e; }
+.dif-ok     { background: #d1fae5; color: #065f46; }
+.ref-chip   { font-size: 0.72rem; font-family: monospace; color: #4338ca;
+  background: #eef2ff; padding: 0.1rem 0.35rem; border-radius: 4px; }
+.cat-chip   { font-size: 0.7rem; color: #475569; background: #f1f5f9;
+  padding: 0.1rem 0.35rem; border-radius: 4px; }
+
+/* ── Capacidad restante / comprometido ──────────────────── */
+.capacidad-val      { font-size: 0.8rem; color: #1e293b; font-weight: 600; }
+.capacidad-parcial  { color: #0f766e; }
+.comprometido-badge { display: block; font-size: 0.65rem; color: #b45309;
+  font-weight: 500; margin-top: 0.1rem; }
+
+/* ── Días desde vencimiento ─────────────────────────────── */
+.days-chip   { font-size: 0.72rem; font-weight: 600; padding: 0.1rem 0.4rem; border-radius: 4px; }
+.days-ideal  { background: #d1fae5; color: #065f46; }
+.days-before { background: #ede9fe; color: #6d28d9; }
+.days-late   { background: #fef9c3; color: #92400e; }
+
+/* ── Tabla combinacional ────────────────────────────────── */
+.comb-table { width: 100%; border-collapse: collapse; font-size: 0.79rem;
+  background: #fff; border-radius: 8px; overflow: hidden; border: 1px solid #e2e8f0; }
+.comb-table th { padding: 0.45rem 0.7rem; text-align: left; font-weight: 600;
+  color: #64748b; font-size: 0.68rem; text-transform: uppercase;
+  background: #f0fdfa; border-bottom: 1px solid #e2e8f0; }
+.comb-row td { padding: 0.55rem 0.7rem; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+.comb-row:last-child td { border-bottom: none; }
+.comb-row-top { background: #f0fdf4; }
+.comb-rank { font-weight: 700; color: #64748b; font-size: 0.78rem; text-align: center; }
+
+.comb-detail-header { display: flex; align-items: flex-start; gap: 0.5rem;
+  margin-bottom: 0.75rem; font-size: 0.79rem; }
+.comb-detail-title   { font-weight: 600; color: #475569; white-space: nowrap; }
+.comb-detail-concepto { color: #1e293b; }
+
+.comb-cxcs-detail { display: flex; flex-direction: column; gap: 0.35rem; }
+.cxc-detail-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.cxc-erpid-sm   { font-size: 0.65rem; color: #94a3b8; }
+.cxc-saldo      { font-size: 0.78rem; font-weight: 600; color: #0f766e; }
+.fecha-chip-sm  { font-size: 0.65rem; color: #64748b;
+  background: #f1f5f9; padding: 0.05rem 0.3rem; border-radius: 4px; }
+</style>
