@@ -15,10 +15,6 @@
       <!-- Navigation -->
       <div class="sidebar-nav">
         <div *ngIf="!sidebarCollapsed" class="sidebar-section">Principal</div>
-        <a routerLink="/cfdis" routerLinkActive="active" [title]="sidebarCollapsed ? 'CFDIs' : ''">
-          <span class="sidebar-icon">⊡</span>
-          <span *ngIf="!sidebarCollapsed">CFDIs</span>
-        </a>
         <a routerLink="/banks" routerLinkActive="active" [title]="sidebarCollapsed ? 'Bancos' : ''">
           <span class="sidebar-icon">₿</span>
           <span *ngIf="!sidebarCollapsed">Bancos</span>
@@ -32,6 +28,12 @@
         <a routerLink="/account-plan" routerLinkActive="active" [title]="sidebarCollapsed ? 'Catálogo de Cuentas' : ''">
           <span class="sidebar-icon">📒</span>
           <span *ngIf="!sidebarCollapsed">Catálogo de Cuentas</span>
+        </a>
+
+        <div *ngIf="!sidebarCollapsed" class="sidebar-section">Experimental</div>
+        <a routerLink="/erp-matches" routerLinkActive="active" [title]="sidebarCollapsed ? 'CxC vs Bancos' : ''">
+          <span class="sidebar-icon">🔬</span>
+          <span *ngIf="!sidebarCollapsed">CxC vs Bancos</span>
         </a>
       </div>
 

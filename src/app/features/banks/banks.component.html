@@ -8,14 +8,33 @@
       <div>
         <h1 class="bk-title">Bancos</h1>
         <p class="bk-subtitle">Selecciona un banco para ver sus movimientos</p>
+
       </div>
-      <button class="btn-import-dark" (click)="openImportModal()">
-        <svg width="14" height="14" viewBox="0 0 20 20" fill="none"
-             stroke="currentColor" stroke-width="2.2">
-          <path d="M10 3v11M5 9l5-6 5 6"/><path d="M3 17h14"/>
-        </svg>
-        Importar movimientos
-      </button>
+      <div style="display:flex;gap:.5rem;align-items:center">
+        <button class="btn-aux-dark" (click)="openAuxView()">
+          <svg width="13" height="13" viewBox="0 0 20 20" fill="none"
+               stroke="currentColor" stroke-width="2.2">
+            <circle cx="10" cy="10" r="8"/>
+            <path d="M7 10l2 2 4-4"/>
+          </svg>
+          Identificados
+        </button>
+        <button class="btn-aux-dark" (click)="openAuxModal()">
+          <svg width="13" height="13" viewBox="0 0 20 20" fill="none"
+               stroke="currentColor" stroke-width="2.2">
+            <rect x="3" y="3" width="14" height="14" rx="2"/>
+            <path d="M7 10h6M10 7v6"/>
+          </svg>
+          Catálogo auxiliar
+        </button>
+        <button class="btn-import-dark" (click)="openImportModal()">
+          <svg width="14" height="14" viewBox="0 0 20 20" fill="none"
+               stroke="currentColor" stroke-width="2.2">
+            <path d="M10 3v11M5 9l5-6 5 6"/><path d="M3 17h14"/>
+          </svg>
+          Importar movimientos
+        </button>
+      </div>
     </div>
 
     <!-- Loading -->
@@ -31,89 +50,83 @@
       <button class="btn-import mt-3" (click)="openImportModal()">Importar movimientos</button>
     </div>
 
-    <!-- Grid de tarjetas -->
-    <div *ngIf="!cardsLoading && bankCards.length > 0" class="cards-grid">
-      <div class="bank-card" *ngFor="let card of bankCards"
-           (click)="openBank(card.banco)"
-           [style.--accent]="bancoAccent[card.banco] || '#334155'"
-           [style.--light]="bancoLight[card.banco] || '#f8fafc'">
+    <!-- Tabla de bancos -->
+    <div *ngIf="!cardsLoading && bankCards.length > 0" class="banks-table-wrap">
+      <table class="banks-table">
+        <thead>
+          <tr>
+            <th>Banco</th>
+            <th>Número de cuenta</th>
+            <th>Última actualización</th>
+            <th class="col-right">Movimientos</th>
+            <th class="col-right">Saldo pendiente</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let card of bankCards"
+              class="banks-table-row"
+              (click)="openBank(card.banco)">
 
-        <!-- Fila superior: pill banco + recency -->
-        <div class="card-toprow">
-          <span class="banco-pill"
-                [style.background]="bancoLight[card.banco]"
-                [style.color]="bancoAccent[card.banco]">
-            {{ card.banco }}
-          </span>
-          <div class="recency-wrap">
-            <span class="recency-dot" [ngClass]="recencyClass(card.ultimaImport)"></span>
-            <span class="recency-label">{{ formatRecency(card.ultimaImport) }}</span>
-          </div>
-        </div>
+            <!-- Banco -->
+            <td>
+              <div class="bt-banco-cell">
+                <span class="recency-dot" [ngClass]="recencyClass(card.ultimaImport)"></span>
+                <span class="banco-pill"
+                      [style.background]="bancoLight[card.banco]"
+                      [style.color]="bancoAccent[card.banco]">
+                  {{ card.banco }}
+                </span>
+              </div>
+            </td>
 
-        <!-- Número de cuenta (enmascarado) -->
-        <div class="card-account">
-          <span class="account-dots">●●●●</span>
-          <span class="account-num">{{ card.numeroCuenta || '————' }}</span>
-        </div>
+            <!-- Número de cuenta -->
+            <td>
+              <div class="bt-cuenta-cell">
+                <span *ngIf="card.numeroCuenta" class="bt-cuenta">
+                  <span class="account-dots-sm">●●●●</span> {{ card.numeroCuenta }}
+                </span>
+                <span *ngIf="!card.numeroCuenta" class="bt-no-cuenta">—</span>
+                <button class="btn-edit-cuenta" (click)="openCuentaModal(card, $event)"
+                        title="Editar cuenta">
+                  <svg width="12" height="12" viewBox="0 0 20 20" fill="none"
+                       stroke="currentColor" stroke-width="2.2">
+                    <path d="M13.5 3.5l3 3L7 16H4v-3L13.5 3.5z"/>
+                  </svg>
+                </button>
+              </div>
+            </td>
 
-        <!-- Dos cajas de métricas -->
-        <div class="card-stats">
-          <div class="stat-box">
-            <span class="stat-label">Depósitos</span>
-            <span class="stat-val stat-dep">{{ card.totalDepositos | currency:'MXN':'symbol':'1.0-0' }}</span>
-          </div>
-          <div class="stat-box">
-            <span class="stat-label">Retiros</span>
-            <span class="stat-val stat-ret">{{ card.totalRetiros | currency:'MXN':'symbol':'1.0-0' }}</span>
-          </div>
-        </div>
+            <!-- Última actualización -->
+            <td>
+              <span class="bt-recency">{{ formatRecency(card.ultimaImport) }}</span>
+            </td>
 
-        <!-- Desglose por status -->
-        <div class="card-status-row">
-          <span class="status-mini">
-            <span class="status-dot dot-pending"></span>
-            {{ card.porStatus.no_identificado | number }}
-          </span>
-          <span class="status-mini">
-            <span class="status-dot dot-done"></span>
-            {{ card.porStatus.identificado | number }}
-          </span>
-          <span class="status-mini">
-            <span class="status-dot dot-other"></span>
-            {{ card.porStatus.otros | number }}
-          </span>
-        </div>
+            <!-- Movimientos -->
+            <td class="col-right">
+              <span class="bt-movs">{{ card.movimientos | number }}</span>
+            </td>
 
-        <!-- Cuenta contable (si hay) -->
-        <div class="card-cuenta" *ngIf="card.cuentaContable">
-          <svg width="11" height="11" viewBox="0 0 20 20" fill="none"
-               stroke="currentColor" stroke-width="2">
-            <path d="M4 6h12M4 10h8M4 14h6"/>
-          </svg>
-          {{ card.cuentaContable }}
-        </div>
+            <!-- Saldo pendiente (no_identificado) -->
+            <td class="col-right">
+              <span class="bt-saldo"
+                    [class.bt-saldo-pos]="card.saldoPendiente > 0"
+                    [class.bt-saldo-neg]="card.saldoPendiente < 0">
+                {{ card.saldoPendiente | currency:'MXN':'symbol':'1.2-2' }}
+              </span>
+            </td>
 
-        <!-- Footer -->
-        <div class="card-footer">
-          <div class="card-footer-left">
-            <span class="movs-count">{{ card.movimientos | number }} movimientos</span>
-            <button class="btn-cuenta" (click)="openCuentaModal(card, $event)"
-                    [title]="card.cuentaContable ? 'Editar cuenta contable' : 'Vincular cuenta contable'">
-              <svg width="12" height="12" viewBox="0 0 20 20" fill="none"
+            <!-- Flecha -->
+            <td class="col-arrow">
+              <svg width="15" height="15" viewBox="0 0 20 20" fill="none"
                    stroke="currentColor" stroke-width="2.2">
-                <path d="M4 5h12M4 10h8M4 15h5"/>
+                <path d="M7 4l6 6-6 6"/>
               </svg>
-              {{ card.cuentaContable ? 'Cuenta: ' + card.cuentaContable : 'Cuenta contable' }}
-            </button>
-          </div>
-          <svg class="arrow-icon" width="16" height="16" viewBox="0 0 20 20" fill="none"
-               stroke="currentColor" stroke-width="2.2">
-            <path d="M7 4l6 6-6 6"/>
-          </svg>
-        </div>
+            </td>
 
-      </div>
+          </tr>
+        </tbody>
+      </table>
     </div>
 
   </ng-container>
@@ -160,16 +173,12 @@
     <!-- Stats bar -->
     <div class="stats-bar" *ngIf="activeCard">
       <div class="stats-card">
-        <span class="stats-label">Depósitos</span>
-        <span class="stats-val stats-dep">{{ activeCard.totalDepositos | currency:'MXN':'symbol':'1.0-0' }}</span>
-      </div>
-      <div class="stats-card">
-        <span class="stats-label">Retiros</span>
-        <span class="stats-val stats-ret">{{ activeCard.totalRetiros | currency:'MXN':'symbol':'1.0-0' }}</span>
-      </div>
-      <div class="stats-card">
-        <span class="stats-label">Total movimientos</span>
-        <span class="stats-val">{{ activeCard.movimientos | number }}</span>
+        <span class="stats-label">{{ saldoDinamico.label }}</span>
+        <span class="stats-val"
+              [class.stats-dep]="saldoDinamico.amount > 0"
+              [class.stats-ret]="saldoDinamico.amount < 0">
+          {{ saldoDinamico.amount | currency:'MXN':'symbol':'1.2-2' }}
+        </span>
       </div>
     </div>
 
@@ -303,9 +312,24 @@
               </td>
 
               <td class="td-uuid">
-                <span *ngIf="m.uuidXML" class="uuid-chip" [title]="m.uuidXML">
-                  {{ m.uuidXML | slice:0:8 }}…
-                </span>
+                <ng-container *ngIf="m.uuidXML">
+                  <div class="uuid-cell-group">
+                    <span class="uuid-chip" [title]="m.uuidXML">
+                      {{ m.uuidXML | slice:0:8 }}…
+                    </span>
+                    <button class="btn-uuid-unlink"
+                            (click)="unlinkUuidFromRow(m, $event)"
+                            [disabled]="unlinkingId === m._id"
+                            title="Desvincular UUID">
+                      <div *ngIf="unlinkingId === m._id" class="spinner spinner-sm"></div>
+                      <svg *ngIf="unlinkingId !== m._id" width="10" height="10"
+                           viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <path d="M9 11H6a4 4 0 010-8h3M11 9h3a4 4 0 010 8h-3"/>
+                        <line x1="4" y1="4" x2="16" y2="16"/>
+                      </svg>
+                    </button>
+                  </div>
+                </ng-container>
                 <button *ngIf="!m.uuidXML" class="btn-uuid-link"
                         (click)="openUuidModal(m, $event)"
                         title="Vincular CFDI">
@@ -385,6 +409,308 @@
 
   </ng-container>
 
+  <!-- ══ VISTA: IDENTIFICADOS POR AUXILIAR ════════════════════════════════════ -->
+  <ng-container *ngIf="view === 'auxiliar'">
+
+    <!-- Header -->
+    <div class="bk-header">
+      <div class="detail-header-left">
+        <button class="back-btn" (click)="goBackFromAux()">
+          <svg width="14" height="14" viewBox="0 0 20 20" fill="none"
+               stroke="currentColor" stroke-width="2.5">
+            <path d="M13 4l-6 6 6 6"/>
+          </svg>
+          {{ activeAuxCliente ? 'Todos los clientes' : 'Volver' }}
+        </button>
+        <div>
+          <h1 class="bk-title" style="margin:0">
+            {{ activeAuxCliente ? activeAuxCliente : 'Identificados por auxiliar' }}
+          </h1>
+          <p class="bk-subtitle" style="margin:0" *ngIf="!activeAuxCliente">
+            Movimientos bancarios identificados mediante el catálogo auxiliar
+          </p>
+          <p class="bk-subtitle" style="margin:0" *ngIf="activeAuxCliente && activeAuxClienteData">
+            {{ activeAuxClienteData.movimientos }} movimiento{{ activeAuxClienteData.movimientos !== 1 ? 's' : '' }} ·
+            Depósitos: <strong>{{ activeAuxClienteData.totalDepositos | currency:'MXN':'symbol':'1.2-2' }}</strong>
+          </p>
+        </div>
+      </div>
+
+      <!-- Acción: aplicar coincidencias -->
+      <div *ngIf="!activeAuxCliente" style="display:flex;flex-direction:column;align-items:flex-end;gap:.4rem">
+        <button class="btn-import-dark" (click)="aplicarAuxiliar()" [disabled]="applyingAux">
+          <div *ngIf="applyingAux" class="spinner spinner-sm"></div>
+          <svg *ngIf="!applyingAux" width="14" height="14" viewBox="0 0 20 20" fill="none"
+               stroke="currentColor" stroke-width="2.2">
+            <path d="M4 4l12 12M4 16L16 4"/>
+          </svg>
+          {{ applyingAux ? 'Aplicando…' : 'Aplicar coincidencias' }}
+        </button>
+        <span *ngIf="applyAuxResult" style="font-size:.78rem;color:#15803d">
+          {{ applyAuxResult.actualizados }} movimientos identificados
+          <span style="color:#64748b"> · {{ applyAuxResult.noEncontrados }} referencias sin coincidencia</span>
+        </span>
+        <span *ngIf="applyAuxError" style="font-size:.78rem;color:#b91c1c">{{ applyAuxError }}</span>
+      </div>
+    </div>
+
+    <!-- ══ Sub-vista: tabla de clientes ══ -->
+    <ng-container *ngIf="!activeAuxCliente">
+
+      <!-- Loading -->
+      <div *ngIf="auxClientesLoading" class="cards-loading">
+        <div class="spinner"></div>
+      </div>
+
+      <!-- Sin datos -->
+      <div *ngIf="!auxClientesLoading && auxClientes.length === 0" class="cards-empty">
+        <div class="cards-empty-icon">🔍</div>
+        <div class="cards-empty-title">Sin movimientos identificados</div>
+        <div class="cards-empty-sub">Importa el catálogo auxiliar y presiona "Aplicar coincidencias"</div>
+      </div>
+
+      <!-- Tabla de clientes -->
+      <div *ngIf="!auxClientesLoading && auxClientes.length > 0" class="banks-table-wrap">
+        <table class="banks-table">
+          <thead>
+            <tr>
+              <th>Cliente / Entidad</th>
+              <th class="col-right">Movimientos</th>
+              <th class="col-right">Total depósitos</th>
+              <th class="col-right">Total retiros</th>
+              <th>Bancos</th>
+              <th>Última fecha</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let cli of auxClientes"
+                class="banks-table-row"
+                (click)="openAuxCliente(cli._id)">
+              <td>
+                <span class="aux-cliente-name">{{ cli._id }}</span>
+              </td>
+              <td class="col-right">
+                <span class="aux-count-badge">{{ cli.movimientos }}</span>
+              </td>
+              <td class="col-right">
+                <span *ngIf="cli.totalDepositos > 0" class="mov-dep">
+                  +{{ cli.totalDepositos | currency:'MXN':'symbol':'1.2-2' }}
+                </span>
+                <span *ngIf="cli.totalDepositos === 0" style="color:#cbd5e1">—</span>
+              </td>
+              <td class="col-right">
+                <span *ngIf="cli.totalRetiros > 0" class="mov-ret">
+                  -{{ cli.totalRetiros | currency:'MXN':'symbol':'1.2-2' }}
+                </span>
+                <span *ngIf="cli.totalRetiros === 0" style="color:#cbd5e1">—</span>
+              </td>
+              <td>
+                <div style="display:flex;gap:.3rem;flex-wrap:wrap">
+                  <span *ngFor="let b of cli.bancos"
+                        class="banco-pill"
+                        [style.background]="bancoLight[b]"
+                        [style.color]="bancoAccent[b]"
+                        style="font-size:.72rem;padding:.15rem .45rem">
+                    {{ b }}
+                  </span>
+                </div>
+              </td>
+              <td style="font-size:.82rem;color:#64748b">
+                {{ cli.ultimaFecha | date:'dd/MM/yyyy' }}
+              </td>
+              <td class="col-arrow">
+                <svg width="15" height="15" viewBox="0 0 20 20" fill="none"
+                     stroke="currentColor" stroke-width="2.2">
+                  <path d="M7 4l6 6-6 6"/>
+                </svg>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="aux-total-row">
+          <span style="color:#64748b;font-size:.82rem">
+            {{ auxClientes.length }} cliente{{ auxClientes.length !== 1 ? 's' : '' }} identificado{{ auxClientes.length !== 1 ? 's' : '' }}
+          </span>
+        </div>
+      </div>
+
+    </ng-container>
+
+    <!-- ══ Sub-vista: movimientos del cliente ══ -->
+    <ng-container *ngIf="activeAuxCliente">
+
+      <div *ngIf="auxMovLoading" class="cards-loading">
+        <div class="spinner"></div>
+      </div>
+
+      <div *ngIf="!auxMovLoading && auxMovements.length === 0" class="cards-empty">
+        <div class="cards-empty-title">Sin movimientos</div>
+      </div>
+
+      <div *ngIf="!auxMovLoading && auxMovements.length > 0" class="mov-panel">
+        <table class="mov-table">
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Banco</th>
+              <th>Concepto</th>
+              <th class="col-right">Depósito</th>
+              <th class="col-right">Retiro</th>
+              <th>Estado</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let m of auxMovements" class="mov-row">
+              <td class="mov-fecha">{{ m.fecha | date:'dd/MM/yyyy' }}</td>
+              <td>
+                <span class="banco-pill"
+                      [style.background]="bancoLight[m.banco]"
+                      [style.color]="bancoAccent[m.banco]"
+                      style="font-size:.75rem">
+                  {{ m.banco }}
+                </span>
+              </td>
+              <td class="mov-concepto-cell">
+                <span class="mov-concepto" [title]="m.concepto">
+                  {{ m.concepto | slice:0:70 }}{{ (m.concepto?.length ?? 0) > 70 ? '…' : '' }}
+                </span>
+                <span *ngIf="m.folio" class="mov-folio">{{ m.folio }}</span>
+              </td>
+              <td class="col-right">
+                <span *ngIf="m.deposito" class="mov-dep">
+                  +{{ m.deposito | currency:'MXN':'symbol':'1.2-2' }}
+                </span>
+              </td>
+              <td class="col-right">
+                <span *ngIf="m.retiro" class="mov-ret">
+                  -{{ m.retiro | currency:'MXN':'symbol':'1.2-2' }}
+                </span>
+              </td>
+              <td>
+                <span class="status-badge" [ngClass]="statusClass(m.status)">
+                  {{ statusLabel(m.status) }}
+                </span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <!-- Paginación -->
+        <div class="pag-bar" *ngIf="auxMovPagination.pages > 1">
+          <button class="pag-btn pag-nav"
+                  [disabled]="auxMovPagination.page <= 1"
+                  (click)="loadAuxMovimientos(auxMovPagination.page - 1)">‹</button>
+          <button *ngFor="let p of pageNumbers()"
+                  class="pag-btn"
+                  [class.pag-active]="p === auxMovPagination.page"
+                  [disabled]="p === -1"
+                  (click)="p !== -1 && loadAuxMovimientos(p)">
+            {{ p === -1 ? '…' : p }}
+          </button>
+          <button class="pag-btn pag-nav"
+                  [disabled]="auxMovPagination.page >= auxMovPagination.pages"
+                  (click)="loadAuxMovimientos(auxMovPagination.page + 1)">›</button>
+          <span class="pag-info">
+            {{ (auxMovPagination.page - 1) * auxMovPagination.limit + 1 }}–{{ min(auxMovPagination.page * auxMovPagination.limit, auxMovPagination.total) }}
+            de {{ auxMovPagination.total | number }}
+          </span>
+        </div>
+      </div>
+
+    </ng-container>
+
+  </ng-container>
+
+</div>
+
+<!-- ══ MODAL: CATÁLOGO AUXILIAR ══════════════════════════════════════════════ -->
+<div *ngIf="showAuxModal" class="modal-backdrop" (click)="closeAuxModal()">
+  <div class="modal-box" (click)="$event.stopPropagation()">
+
+    <div class="modal-head">
+      <div>
+        <div class="modal-title">Catálogo auxiliar de cuentas</div>
+        <div class="modal-sub">Excel con dos columnas: referencia y nombre</div>
+      </div>
+      <button class="modal-close" (click)="closeAuxModal()">✕</button>
+    </div>
+
+    <div class="modal-body">
+      <label class="dropzone"
+             [class.drag-over]="auxIsDragging"
+             [class.has-file]="auxFile"
+             (dragover)="onAuxDragOver($event)"
+             (dragleave)="onAuxDragLeave()"
+             (drop)="onAuxDrop($event)">
+        <input type="file" accept=".xlsx,.xls" style="display:none"
+               (change)="onAuxFileSelected($event)">
+
+        <ng-container *ngIf="!auxFile">
+          <svg viewBox="0 0 48 48" fill="none" stroke="#9ca3af" stroke-width="2"
+               width="44" height="44">
+            <rect x="8" y="4" width="32" height="40" rx="4"/>
+            <path d="M16 14h16M16 20h16M16 26h10"/>
+            <path d="M30 32l4 4 8-8" stroke="#16a34a" stroke-width="2.5"/>
+          </svg>
+          <div class="drop-label">Arrastra aquí o haz clic para seleccionar</div>
+          <div class="drop-hint">.xlsx · .xls</div>
+        </ng-container>
+
+        <ng-container *ngIf="auxFile">
+          <svg viewBox="0 0 48 48" fill="none" stroke="#15803d" stroke-width="2"
+               width="36" height="36">
+            <rect x="8" y="4" width="32" height="40" rx="4"/>
+            <path d="M16 18h16M16 24h10"/>
+          </svg>
+          <div class="drop-file-name">{{ auxFile.name }}</div>
+          <div class="drop-hint">
+            {{ (auxFile.size / 1024).toFixed(0) }} KB ·
+            <span style="color:#6366f1">Cambiar archivo</span>
+          </div>
+        </ng-container>
+      </label>
+
+      <div *ngIf="auxResult" class="import-result success">
+        <svg width="18" height="18" viewBox="0 0 20 20" fill="none"
+             stroke="#15803d" stroke-width="2.2">
+          <circle cx="10" cy="10" r="9"/><path d="M6 10l3 3 5-5"/>
+        </svg>
+        <div>
+          <strong>{{ auxResult.importados }}</strong> registros nuevos
+          <span *ngIf="auxResult.actualizados > 0" class="result-dup">
+            · {{ auxResult.actualizados }} actualizados
+          </span>
+          <span *ngIf="auxResult.omitidos > 0" class="result-dup" style="color:#b45309">
+            · {{ auxResult.omitidos }} con error
+          </span>
+          <span style="color:#94a3b8;font-size:.78rem;display:block;margin-top:.2rem">
+            Total procesados: {{ auxResult.total }}
+          </span>
+        </div>
+      </div>
+
+      <div *ngIf="auxError" class="import-result error">
+        <svg width="18" height="18" viewBox="0 0 20 20" fill="none"
+             stroke="#b91c1c" stroke-width="2.2">
+          <circle cx="10" cy="10" r="9"/><path d="M10 6v4M10 14h.01"/>
+        </svg>
+        {{ auxError }}
+      </div>
+    </div>
+
+    <div class="modal-foot">
+      <button class="btn-ghost" (click)="closeAuxModal()">Cerrar</button>
+      <button class="btn-import" [disabled]="!auxFile || auxUploading" (click)="uploadAuxiliar()">
+        <svg *ngIf="!auxUploading" width="15" height="15" viewBox="0 0 20 20" fill="none"
+             stroke="currentColor" stroke-width="2.2">
+          <path d="M10 3v11M5 9l5-6 5 6"/><path d="M3 17h14"/>
+        </svg>
+        <div *ngIf="auxUploading" class="spinner spinner-sm"></div>
+        {{ auxUploading ? 'Procesando…' : 'Importar' }}
+      </button>
+    </div>
+  </div>
 </div>
 
 <!-- ══ MODAL: IMPORTAR MOVIMIENTOS ══════════════════════════════════════════ -->
@@ -528,130 +854,323 @@
 
 <!-- ══ MODAL: VINCULAR UUID CFDI ════════════════════════════════════════════ -->
 <div *ngIf="showUuidModal" class="modal-backdrop" (click)="closeUuidModal()">
-  <div class="modal-box modal-sm" (click)="$event.stopPropagation()">
+  <div class="modal-box uuid-modal-box" (click)="$event.stopPropagation()">
 
-    <div class="modal-head">
-      <div>
-        <div class="modal-title">Vincular UUID CFDI</div>
-        <div class="modal-sub" *ngIf="uuidModalMovement">
-          {{ uuidModalMovement.fecha | date:'dd/MM/yyyy' }} ·
+    <!-- ══ MODO: Lista completa de UUID vinculados ══ -->
+    <ng-container *ngIf="showLinkedPanel">
+
+      <div class="modal-head">
+        <div style="display:flex;align-items:center;gap:.65rem">
+          <button class="uuid-back-btn" (click)="showLinkedPanel = false" title="Volver a vincular">
+            <svg width="14" height="14" viewBox="0 0 20 20" fill="none"
+                 stroke="currentColor" stroke-width="2.3">
+              <path d="M13 4l-6 6 6 6"/>
+            </svg>
+          </button>
+          <div>
+            <div class="modal-title">UUID vinculados</div>
+            <div class="modal-sub">
+              {{ linkedMovements.length }} movimiento{{ linkedMovements.length !== 1 ? 's' : '' }}
+              con CFDI asignado en esta vista
+            </div>
+          </div>
+        </div>
+        <button class="modal-close" (click)="closeUuidModal()">✕</button>
+      </div>
+
+      <!-- Sin datos -->
+      <div *ngIf="linkedMovements.length === 0" class="uuid-linked-empty">
+        <svg width="36" height="36" viewBox="0 0 20 20" fill="none" stroke="#d1d5db" stroke-width="1.4">
+          <path d="M10 13H7a4 4 0 010-8h3M10 7h3a4 4 0 010 8h-3M8 10h4"/>
+        </svg>
+        <span>Ningún movimiento tiene UUID vinculado en esta vista</span>
+      </div>
+
+      <!-- Tarjetas -->
+      <div class="uuid-linked-full-list">
+        <div *ngFor="let lm of linkedMovements" class="ulc-card">
+
+          <!-- UUID completo -->
+          <div class="ulc-uuid-row">
+            <span class="ulc-uuid-label">UUID</span>
+            <span class="ulc-uuid-val" [title]="'Click para seleccionar y copiar'">
+              {{ lm.uuidXML }}
+            </span>
+          </div>
+
+          <!-- Chips de metadatos -->
+          <div class="ulc-meta-row">
+            <span *ngIf="lm.folio" class="ulc-folio-chip">{{ lm.folio }}</span>
+            <span class="ulc-banco-chip"
+                  [style.background]="bancoLight[lm.banco] || '#f1f5f9'"
+                  [style.color]="bancoAccent[lm.banco] || '#475569'">
+              {{ lm.banco }}
+            </span>
+            <span class="ulc-status-chip" [ngClass]="statusClass(lm.status)">
+              {{ statusLabel(lm.status) }}
+            </span>
+            <span class="ulc-date-chip">
+              <svg width="10" height="10" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="4" width="14" height="14" rx="2"/><path d="M3 8h14M8 2v3M12 2v3"/>
+              </svg>
+              {{ lm.fecha | date:'dd MMM yyyy' }}
+            </span>
+          </div>
+
+          <!-- Concepto -->
+          <div class="ulc-concepto" [title]="lm.concepto">{{ lm.concepto }}</div>
+
+          <!-- Pie: monto + botón desvincular -->
+          <div class="ulc-foot">
+            <div class="ulc-monto-wrap">
+              <span class="ulc-monto-label">{{ lm.deposito ? 'Depósito' : 'Retiro' }}</span>
+              <span class="ulc-monto" [style.color]="lm.deposito ? '#15803d' : '#dc2626'">
+                {{ (lm.deposito ?? lm.retiro) | currency:'MXN':'symbol':'1.2-2' }}
+              </span>
+            </div>
+            <button class="btn-ulc-unlink"
+                    (click)="unlinkUuidFromPanel(lm)"
+                    [disabled]="unlinkingId === lm._id">
+              <div *ngIf="unlinkingId === lm._id" class="spinner spinner-sm"></div>
+              <ng-container *ngIf="unlinkingId !== lm._id">
+                <svg width="13" height="13" viewBox="0 0 20 20" fill="none"
+                     stroke="currentColor" stroke-width="2.3">
+                  <path d="M9 11H6a4 4 0 010-8h3M11 9h3a4 4 0 010 8h-3"/>
+                  <line x1="4" y1="4" x2="16" y2="16"/>
+                </svg>
+                Desvincular
+              </ng-container>
+              <span *ngIf="unlinkingId === lm._id">Desvinculando…</span>
+            </button>
+          </div>
+
+        </div>
+      </div>
+
+    </ng-container>
+
+    <!-- ══ MODO: Vincular UUID ══ -->
+    <ng-container *ngIf="!showLinkedPanel">
+
+      <!-- Cabecera -->
+      <div class="modal-head">
+        <div>
+          <div class="modal-title">Vincular UUID</div>
+          <div class="modal-sub">Ingresa el UUID del CFDI correspondiente al movimiento</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:.5rem;flex-shrink:0">
+          <button *ngIf="linkedMovements.length > 0"
+                  class="uuid-panel-toggle-btn"
+                  (click)="showLinkedPanel = true"
+                  title="Ver movimientos ya vinculados">
+            <svg width="12" height="12" viewBox="0 0 20 20" fill="none"
+                 stroke="currentColor" stroke-width="2.2">
+              <path d="M10 13H7a4 4 0 010-8h3M10 7h3a4 4 0 010 8h-3M8 10h4"/>
+            </svg>
+            {{ linkedMovements.length }} vinculado{{ linkedMovements.length !== 1 ? 's' : '' }}
+          </button>
+          <button class="modal-close" (click)="closeUuidModal()">✕</button>
+        </div>
+      </div>
+
+      <!-- Tira de contexto: datos del movimiento bancario -->
+      <div class="uuid-mov-strip" *ngIf="uuidModalMovement">
+        <div class="uuid-mov-left">
+          <span class="uuid-mov-concepto" [title]="uuidModalMovement.concepto">
+            {{ uuidModalMovement.concepto | slice:0:55 }}{{ uuidModalMovement.concepto.length > 55 ? '…' : '' }}
+          </span>
+          <span class="uuid-mov-meta">
+            <svg width="11" height="11" viewBox="0 0 20 20" fill="none" stroke="#9ca3af" stroke-width="2">
+              <rect x="3" y="4" width="14" height="14" rx="2"/><path d="M3 8h14M8 2v3M12 2v3"/>
+            </svg>
+            {{ uuidModalMovement.fecha | date:'dd MMM yyyy' }}
+          </span>
+        </div>
+        <div class="uuid-mov-monto"
+             [style.color]="uuidModalMovement.deposito ? '#15803d' : '#dc2626'">
           {{ (uuidModalMovement.deposito ?? uuidModalMovement.retiro) | currency:'MXN':'symbol':'1.2-2' }}
         </div>
       </div>
-      <button class="modal-close" (click)="closeUuidModal()">✕</button>
-    </div>
 
-    <div class="modal-body">
-      <div class="uuid-mov-info" *ngIf="uuidModalMovement">
-        <span class="uuid-mov-concepto">{{ uuidModalMovement.concepto }}</span>
+      <!-- Input UUID -->
+      <div class="modal-body">
+        <div class="form-field">
+          <label class="form-label">UUID del CFDI</label>
+          <input class="form-input form-mono" type="text"
+                 [(ngModel)]="uuidInput"
+                 placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                 (keydown.enter)="confirmUuid()"
+                 autocomplete="off">
+          <span class="form-hint">Formato: 8-4-4-4-12 caracteres hexadecimales</span>
+        </div>
+
+        <!-- Advertencia permanencia -->
+        <div class="uuid-warning uuid-warning-inline" style="margin-top:.75rem">
+          <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="#b45309" stroke-width="2">
+            <path d="M10 2L2 17h16L10 2z"/><path d="M10 9v4M10 14.5h.01"/>
+          </svg>
+          Al vincular, el movimiento se marcará como <strong>Identificado</strong> y su estado quedará bloqueado.
+        </div>
+
+        <!-- Error -->
+        <div *ngIf="uuidError" class="import-result error" style="margin-top:.75rem">
+          <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="#b91c1c" stroke-width="2.2">
+            <circle cx="10" cy="10" r="9"/><path d="M10 6v4M10 14h.01"/>
+          </svg>
+          {{ uuidError }}
+        </div>
       </div>
 
-      <div class="form-field">
-        <label class="form-label">UUID del CFDI</label>
-        <input class="form-input form-mono" type="text" [(ngModel)]="uuidInput"
-               placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-               (keydown.enter)="confirmUuid()">
+      <div class="modal-foot">
+        <button class="btn-ghost" (click)="closeUuidModal()">Cancelar</button>
+        <button class="btn-import"
+                [disabled]="!uuidInput.trim() || savingUuid"
+                (click)="confirmUuid()">
+          <div *ngIf="savingUuid" class="spinner spinner-sm"></div>
+          {{ savingUuid ? 'Vinculando…' : 'Vincular' }}
+        </button>
       </div>
 
-      <!-- Aviso: vinculación es permanente -->
-      <div class="uuid-warning">
-        <svg width="14" height="14" viewBox="0 0 20 20" fill="none"
-             stroke="#b45309" stroke-width="2">
-          <path d="M10 2L2 17h16L10 2z"/><path d="M10 9v4M10 14.5h.01"/>
-        </svg>
-        Al vincular, el movimiento se marcará como <strong>Identificado</strong>
-        y el estado no podrá modificarse.
-      </div>
+    </ng-container>
 
-      <div *ngIf="uuidError" class="import-result error" style="margin-top:0">
-        <svg width="16" height="16" viewBox="0 0 20 20" fill="none"
-             stroke="#b91c1c" stroke-width="2.2">
-          <circle cx="10" cy="10" r="9"/><path d="M10 6v4M10 14h.01"/>
-        </svg>
-        {{ uuidError }}
-      </div>
-    </div>
-
-    <div class="modal-foot">
-      <button class="btn-ghost" (click)="closeUuidModal()">Cancelar</button>
-      <button class="btn-import"
-              [disabled]="!uuidInput.trim() || savingUuid"
-              (click)="confirmUuid()">
-        <div *ngIf="savingUuid" class="spinner spinner-sm"></div>
-        {{ savingUuid ? 'Vinculando…' : 'Vincular' }}
-      </button>
-    </div>
   </div>
 </div>
 
 <!-- ══ MODAL: IDs ERP ════════════════════════════════════════════════════════ -->
 <div *ngIf="showErpModal" class="modal-backdrop" (click)="closeErpModal()">
-  <div class="modal-box modal-sm" (click)="$event.stopPropagation()">
+  <div class="modal-box erp-modal-box" (click)="$event.stopPropagation()">
 
+    <!-- Cabecera -->
     <div class="modal-head">
       <div>
-        <div class="modal-title">IDs del ERP</div>
+        <div class="modal-title">Vincular CxC del ERP</div>
         <div class="modal-sub" *ngIf="erpModalMovement">
           {{ erpModalMovement.fecha | date:'dd/MM/yyyy' }} ·
-          {{ (erpModalMovement.deposito ?? erpModalMovement.retiro) | currency:'MXN':'symbol':'1.2-2' }}
+          {{ (erpModalMovement.deposito ?? erpModalMovement.retiro) | currency:'MXN':'symbol':'1.2-2' }} ·
+          <span class="erp-concepto-inline">{{ erpModalMovement.concepto | slice:0:60 }}{{ erpModalMovement.concepto!.length > 60 ? '…' : '' }}</span>
         </div>
       </div>
       <button class="modal-close" (click)="closeErpModal()">✕</button>
     </div>
 
-    <div class="modal-body">
+    <!-- Chips de vinculados -->
+    <div class="erp-linked-bar" *ngIf="(erpModalMovement?.erpIds || []).length > 0">
+      <span class="erp-linked-label">Vinculadas:</span>
+      <span *ngFor="let eid of (erpModalMovement?.erpIds || [])" class="erp-chip-linked">
+        {{ eid }}
+        <button class="erp-chip-rm" (click)="unlinkCxC(eid, $event)" title="Desvincular">✕</button>
+      </span>
+    </div>
+    <div class="erp-linked-bar erp-empty-bar" *ngIf="(erpModalMovement?.erpIds || []).length === 0">
+      <span style="color:#94a3b8;font-size:.78rem">Sin CxC vinculadas — selecciona una de la lista</span>
+    </div>
 
-      <!-- Concepto del movimiento -->
-      <div class="uuid-mov-info" *ngIf="erpModalMovement">
-        <span class="uuid-mov-concepto">{{ erpModalMovement.concepto }}</span>
+    <!-- Filtro de fechas + buscador -->
+    <div class="erp-filter-bar">
+      <div class="erp-date-wrap">
+        <label class="erp-date-label">Desde</label>
+        <input class="erp-date-input" type="date" [ngModel]="erpFechaDesde | slice:0:10"
+               (ngModelChange)="erpFechaDesde = $event + 'T00:00:00Z'">
+      </div>
+      <div class="erp-date-wrap">
+        <label class="erp-date-label">Hasta</label>
+        <input class="erp-date-input" type="date" [ngModel]="erpFechaHasta | slice:0:10"
+               (ngModelChange)="erpFechaHasta = $event + 'T23:59:59Z'">
+      </div>
+      <button class="btn-erp-buscar" (click)="loadErpCuentas()" [disabled]="erpLoading">
+        <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2">
+          <circle cx="8.5" cy="8.5" r="5.5"/><path d="M15 15l-3.5-3.5"/>
+        </svg>
+        {{ erpLoading ? 'Buscando…' : 'Buscar' }}
+      </button>
+    </div>
+
+    <!-- Buscador inline -->
+    <div class="erp-search-wrap">
+      <svg class="erp-search-icon" width="14" height="14" viewBox="0 0 20 20" fill="none"
+           stroke="#9ca3af" stroke-width="2">
+        <circle cx="8.5" cy="8.5" r="5.5"/><path d="M15 15l-3.5-3.5"/>
+      </svg>
+      <input class="erp-search-input" type="text" [(ngModel)]="erpSearch"
+             placeholder="Filtrar por ID, folio o concepto…" autocomplete="off">
+      <button *ngIf="erpSearch" class="erp-search-clear" (click)="erpSearch=''">✕</button>
+    </div>
+
+    <!-- Estado: cargando -->
+    <div *ngIf="erpLoading" class="erp-loading">
+      <div class="spinner"></div>
+      <span>Consultando ERP…</span>
+    </div>
+
+    <!-- Estado: error -->
+    <div *ngIf="erpError && !erpLoading" class="erp-error-msg">
+      <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="10" cy="10" r="8"/><path d="M10 7v4M10 13h.01"/>
+      </svg>
+      {{ erpError }}
+    </div>
+
+    <!-- Lista de CxC -->
+    <div class="erp-cxc-list" *ngIf="!erpLoading && !erpError">
+
+      <div *ngIf="filteredCxC.length === 0 && erpCxcList.length === 0" class="erp-no-results">
+        Sin resultados en el rango de fechas seleccionado.
+      </div>
+      <div *ngIf="filteredCxC.length === 0 && erpCxcList.length > 0" class="erp-no-results">
+        Sin resultados para "{{ erpSearch }}"
       </div>
 
-      <!-- IDs ya registrados -->
-      <div class="erp-list" *ngIf="(erpModalMovement?.erpIds || []).length > 0">
-        <div class="erp-list-label">IDs vinculados ({{ (erpModalMovement?.erpIds || []).length }})</div>
-        <div class="erp-list-chips">
-          <span *ngFor="let eid of (erpModalMovement?.erpIds || [])" class="erp-chip-lg">
-            {{ eid }}
-            <button class="erp-chip-rm-lg" (click)="removeErpId(erpModalMovement!, eid, $event)"
-                    title="Quitar">
-              <svg width="10" height="10" viewBox="0 0 20 20" fill="none"
-                   stroke="currentColor" stroke-width="2.5">
-                <path d="M5 5l10 10M15 5L5 15"/>
-              </svg>
-            </button>
-          </span>
+      <div *ngFor="let cxc of filteredCxC"
+           class="erp-cxc-row"
+           [class.erp-cxc-linked]="isCxCLinked(cxc.id)"
+           (click)="toggleCxC(cxc.id)">
+
+        <!-- Checkbox visual -->
+        <div class="erp-check" [class.erp-check-on]="isCxCLinked(cxc.id)">
+          <svg *ngIf="isCxCLinked(cxc.id)" width="11" height="11" viewBox="0 0 20 20"
+               fill="none" stroke="#fff" stroke-width="3">
+            <path d="M4 10l5 5 7-8"/>
+          </svg>
         </div>
-      </div>
 
-      <div *ngIf="(erpModalMovement?.erpIds || []).length === 0" class="erp-empty">
-        Sin IDs vinculados aún
-      </div>
-
-      <!-- Agregar nuevo ID -->
-      <div class="form-field">
-        <label class="form-label">Agregar ID de CxC del ERP</label>
-        <div class="erp-input-row">
-          <input class="form-input form-mono" type="text" [(ngModel)]="erpInput"
-                 placeholder="ej. CXC-2024-001"
-                 (keydown.enter)="addErpId()">
-          <button class="btn-erp-confirm"
-                  [disabled]="!erpInput.trim() || savingErp"
-                  (click)="addErpId()">
-            <div *ngIf="savingErp" class="spinner spinner-sm"></div>
-            <svg *ngIf="!savingErp" width="14" height="14" viewBox="0 0 20 20"
-                 fill="none" stroke="currentColor" stroke-width="2.8">
-              <path d="M10 4v12M4 10h12"/>
-            </svg>
-            Agregar
-          </button>
+        <!-- Datos de la CxC -->
+        <div class="erp-cxc-info">
+          <div class="erp-cxc-top">
+            <span class="erp-cxc-folio">{{ cxc.serie }}-{{ cxc.folio }}</span>
+            <span class="erp-cxc-tipo" *ngIf="cxc.tipoPago">{{ cxc.tipoPago }}</span>
+          </div>
+          <div class="erp-cxc-id-small"><span class="erp-cxc-id-label">ID:</span> {{ cxc.id }}</div>
         </div>
-      </div>
 
+        <!-- Montos y vencimiento -->
+        <div class="erp-cxc-right">
+          <div class="erp-cxc-saldo">{{ cxc.saldoActual | currency:'MXN':'symbol':'1.2-2' }}</div>
+          <div class="erp-cxc-amounts">
+            <span class="erp-amt-item"><span class="erp-amt-label">Sub</span>{{ cxc.subtotal | currency:'MXN':'symbol':'1.2-2' }}</span>
+            <span class="erp-amt-sep">·</span>
+            <span class="erp-amt-item"><span class="erp-amt-label">IVA</span>{{ cxc.impuesto | currency:'MXN':'symbol':'1.2-2' }}</span>
+            <span class="erp-amt-sep">·</span>
+            <span class="erp-amt-item"><span class="erp-amt-label">Tot</span>{{ cxc.total | currency:'MXN':'symbol':'1.2-2' }}</span>
+          </div>
+          <div class="erp-cxc-fecha" *ngIf="cxc.fechaVencimiento">
+            Vence {{ cxc.fechaVencimiento | date:'dd/MM/yy' }}
+          </div>
+        </div>
+
+      </div>
     </div>
 
     <div class="modal-foot">
-      <button class="btn-ghost" (click)="closeErpModal()">Cerrar</button>
+      <span class="erp-count-msg" style="margin-right:auto" *ngIf="(erpModalMovement?.erpIds || []).length > 0">
+        {{ (erpModalMovement?.erpIds || []).length }} CxC vinculada{{ (erpModalMovement?.erpIds || []).length !== 1 ? 's' : '' }}
+      </span>
+      <button class="btn-ghost" (click)="closeErpModal()" [disabled]="erpSaving">Cancelar</button>
+      <button class="btn-import" (click)="confirmErp()" [disabled]="erpSaving">
+        <div *ngIf="erpSaving" class="spinner spinner-sm"></div>
+        {{ erpSaving ? 'Guardando…' : 'Guardar' }}
+      </button>
     </div>
+
   </div>
 </div>
 
@@ -693,7 +1212,38 @@
   cursor: pointer; transition: background .15s; white-space: nowrap;
 }
 .btn-import-dark:hover { background: #1e293b; }
+.btn-aux-dark {
+  display: inline-flex; align-items: center; gap: .45rem;
+  background: #1e3a5f; color: #fff;
+  border: none; border-radius: 8px;
+  padding: .55rem 1rem; font-size: .85rem; font-weight: 600;
+  cursor: pointer; transition: background .15s; white-space: nowrap;
+}
+.btn-aux-dark:hover { background: #1e4080; }
 .mt-3 { margin-top: .85rem; }
+
+/* ── Vista auxiliar ──────────────────────────────────────────────────────────── */
+.aux-cliente-name {
+  font-weight: 600; font-size: .88rem; color: #1e293b;
+}
+.aux-count-badge {
+  display: inline-block;
+  background: #f1f5f9; color: #475569;
+  border-radius: 99px; padding: .1rem .6rem;
+  font-size: .8rem; font-weight: 600;
+}
+.aux-total-row {
+  padding: .6rem 1rem;
+  border-top: 1px solid #f1f5f9;
+  background: #fafafa;
+  text-align: right;
+}
+.status-badge {
+  display: inline-block;
+  border-radius: 99px;
+  padding: .15rem .6rem;
+  font-size: .75rem; font-weight: 600;
+}
 
 /* ── Grid de tarjetas ───────────────────────────────────────────────────────── */
 .cards-grid {
@@ -769,6 +1319,68 @@
 .btn-cuenta:hover { background: #e0e7ff; }
 .arrow-icon { color: #d1d5db; transition: color .15s; }
 .bank-card:hover .arrow-icon { color: var(--accent, #334155); }
+
+/* ── Tabla de bancos ───────────────────────────────────────────────────────── */
+.banks-table-wrap {
+  background: #fff; border: 1px solid #e5e7eb; border-radius: 14px;
+  overflow: hidden;
+}
+.banks-table {
+  width: 100%; border-collapse: collapse;
+}
+.banks-table thead tr {
+  background: #f9fafb; border-bottom: 1px solid #e5e7eb;
+}
+.banks-table th {
+  padding: .7rem 1.1rem; font-size: .72rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .04em; color: #9ca3af;
+  text-align: left; white-space: nowrap;
+}
+.banks-table th.col-right { text-align: right; }
+.banks-table-row {
+  border-bottom: 1px solid #f3f4f6; cursor: pointer;
+  transition: background .12s;
+}
+.banks-table-row:last-child { border-bottom: none; }
+.banks-table-row:hover { background: #f9fafb; }
+.banks-table td {
+  padding: .95rem 1.1rem; font-size: .85rem; color: #374151;
+  vertical-align: middle;
+}
+.banks-table td.col-right { text-align: right; }
+.banks-table td.col-arrow {
+  text-align: right; padding-right: 1rem; color: #d1d5db; width: 32px;
+}
+.banks-table-row:hover td.col-arrow { color: #6b7280; }
+
+.bt-banco-cell { display: flex; align-items: center; gap: .5rem; }
+.bt-cuenta-cell { display: flex; align-items: center; gap: .45rem; }
+.bt-cuenta { font-family: monospace; font-size: .82rem; color: #374151; font-weight: 600; }
+.bt-no-cuenta { color: #d1d5db; font-size: .85rem; }
+.account-dots-sm { color: #d1d5db; letter-spacing: .06em; font-size: .65rem; }
+.bt-recency { font-size: .82rem; color: #6b7280; }
+.bt-movs { font-variant-numeric: tabular-nums; font-weight: 600; color: #374151; }
+.bt-saldo {
+  font-variant-numeric: tabular-nums; font-weight: 700;
+  font-size: .88rem; color: #374151;
+}
+.bt-saldo-pos { color: #15803d; }
+.bt-saldo-neg { color: #dc2626; }
+.btn-edit-cuenta {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 5px; border: none;
+  background: transparent; color: #d1d5db; cursor: pointer;
+  transition: background .12s, color .12s; flex-shrink: 0;
+  opacity: 0;
+}
+.banks-table-row:hover .btn-edit-cuenta { opacity: 1; }
+.btn-edit-cuenta:hover { background: #eef2ff; color: #6366f1; }
+.btn-cuenta-sm {
+  font-size: .72rem; font-weight: 600; color: #6366f1;
+  background: #eef2ff; border: none; padding: .2rem .55rem; border-radius: 6px;
+  cursor: pointer; transition: background .12s;
+}
+.btn-cuenta-sm:hover { background: #e0e7ff; }
 
 .cards-loading { display: flex; justify-content: center; padding: 4rem; }
 .cards-empty {
@@ -903,7 +1515,8 @@
 .td-date    { white-space: nowrap; color: #6b7280; font-size: .82rem; }
 .td-right   { text-align: right; white-space: nowrap; }
 .td-auth    { font-family: monospace; font-size: .78rem; color: #9ca3af; }
-.td-uuid    { white-space: nowrap; }
+.td-uuid    { white-space: nowrap; vertical-align: middle; }
+.uuid-cell-group { display: inline-flex; align-items: center; gap: .35rem; }
 .td-concepto { max-width: 0; }
 .td-dash    { color: #d1d5db; }
 
@@ -1001,7 +1614,7 @@
 .modal-backdrop {
   position: fixed; inset: 0; background: rgba(15,23,42,.4);
   display: flex; align-items: center; justify-content: center;
-  z-index: 1000; padding: 1rem; backdrop-filter: blur(3px);
+  z-index: 1000; padding: 1rem;
 }
 .modal-box {
   background: #fff; border-radius: 14px; width: 100%; max-width: 520px;
@@ -1136,41 +1749,458 @@
 }
 .btn-erp-add:hover { background: #eef2ff; border-color: #818cf8; color: #4338ca; }
 
-/* ── IDs ERP — modal ────────────────────────────────────────────────────────── */
-.erp-list { display: flex; flex-direction: column; gap: .4rem; }
-.erp-list-label {
-  font-size: .7rem; font-weight: 700; text-transform: uppercase;
-  letter-spacing: .05em; color: #9ca3af;
+/* ── IDs ERP — modal CxC ─────────────────────────────────────────────────── */
+.erp-modal-box { max-width: 660px; }
+
+.erp-concepto-inline { color: #6b7280; font-style: italic; }
+
+/* ── Barra de seleccionadas ─────────────────────────────────────────────── */
+.erp-linked-bar {
+  display: flex; align-items: center; flex-wrap: wrap; gap: .4rem;
+  padding: .55rem 1.25rem; background: #f0fdf4;
+  border-bottom: 1px solid #bbf7d0; min-height: 2.5rem;
 }
-.erp-list-chips { display: flex; flex-wrap: wrap; gap: .4rem; }
-.erp-chip-lg {
-  display: inline-flex; align-items: center; gap: .35rem;
-  font-size: .8rem; font-weight: 600; color: #3730a3;
-  background: #eef2ff; border: 1px solid #c7d2fe;
-  padding: .3rem .5rem .3rem .7rem; border-radius: 7px;
+.erp-empty-bar {
+  background: #f8fafc; border-bottom: 1px solid #e2e8f0; min-height: 2.2rem;
 }
-.erp-chip-rm-lg {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 18px; height: 18px;
+.erp-linked-label {
+  font-size: .68rem; font-weight: 700; color: #15803d;
+  text-transform: uppercase; letter-spacing: .05em; white-space: nowrap;
+}
+.erp-chip-linked {
+  display: inline-flex; align-items: center; gap: .3rem;
+  font-size: .73rem; font-weight: 600; color: #166534;
+  background: #dcfce7; border: 1px solid #86efac;
+  padding: .18rem .4rem .18rem .55rem; border-radius: 99px;
+}
+.erp-chip-linked .erp-chip-rm {
   background: none; border: none; cursor: pointer;
-  color: #a5b4fc; border-radius: 4px; padding: 0;
-  transition: background .1s, color .1s;
+  color: #4ade80; font-size: .8rem; line-height: 1; padding: 0 1px;
+  transition: color .1s;
 }
-.erp-chip-rm-lg:hover { background: #c7d2fe; color: #3730a3; }
-.erp-empty {
-  font-size: .82rem; color: #9ca3af; font-style: italic;
-  text-align: center; padding: .5rem 0;
+.erp-chip-linked .erp-chip-rm:hover { color: #15803d; }
+
+/* ── Filtro de fechas ───────────────────────────────────────────────────── */
+.erp-filter-bar {
+  display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
+  padding: .7rem 1.25rem; border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
 }
-.erp-input-row {
-  display: flex; gap: .5rem;
+.erp-date-wrap {
+  display: flex; align-items: center; gap: .35rem;
 }
-.erp-input-row .form-input { flex: 1; }
-.btn-erp-confirm {
+.erp-date-label {
+  font-size: .72rem; font-weight: 600; color: #64748b;
+  white-space: nowrap;
+}
+.erp-date-input {
+  border: 1px solid #cbd5e1; border-radius: 6px;
+  padding: .28rem .55rem; font-size: .8rem; color: #374151;
+  background: #fff; outline: none; transition: border-color .15s;
+}
+.erp-date-input:focus { border-color: #6366f1; box-shadow: 0 0 0 2px #e0e7ff; }
+.btn-erp-buscar {
   display: inline-flex; align-items: center; gap: .35rem;
-  background: #4338ca; color: #fff; border: none; border-radius: 8px;
-  padding: .55rem .9rem; font-size: .83rem; font-weight: 600;
+  background: #4f46e5; color: #fff; border: none; border-radius: 7px;
+  padding: .32rem .85rem; font-size: .8rem; font-weight: 600;
   cursor: pointer; transition: background .15s; white-space: nowrap;
+  margin-left: auto;
 }
-.btn-erp-confirm:hover:not(:disabled) { background: #3730a3; }
-.btn-erp-confirm:disabled { opacity: .45; cursor: not-allowed; }
+.btn-erp-buscar:hover:not(:disabled) { background: #4338ca; }
+.btn-erp-buscar:disabled { opacity: .5; cursor: not-allowed; }
+
+/* ── Buscador inline ────────────────────────────────────────────────────── */
+.erp-search-wrap {
+  display: flex; align-items: center; gap: .5rem;
+  padding: .55rem 1rem .55rem 1.25rem;
+  border-bottom: 1px solid #f1f5f9;
+  background: #fff;
+}
+.erp-search-icon { flex-shrink: 0; color: #94a3b8; }
+.erp-search-input {
+  flex: 1; border: none; outline: none;
+  font-size: .84rem; color: #111827; background: transparent;
+}
+.erp-search-input::placeholder { color: #94a3b8; }
+.erp-search-clear {
+  background: none; border: none; cursor: pointer;
+  color: #94a3b8; font-size: .85rem; padding: 0 2px; transition: color .1s;
+}
+.erp-search-clear:hover { color: #374151; }
+
+/* ── Estado cargando / error ────────────────────────────────────────────── */
+.erp-loading {
+  display: flex; align-items: center; justify-content: center; gap: .75rem;
+  padding: 2.5rem 1.25rem; color: #64748b; font-size: .85rem;
+}
+.erp-error-msg {
+  display: flex; align-items: center; gap: .5rem;
+  margin: .75rem 1.25rem; padding: .6rem .9rem;
+  background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px;
+  font-size: .82rem; color: #b91c1c;
+}
+
+/* ── Lista de CxC ───────────────────────────────────────────────────────── */
+.erp-cxc-list { overflow-y: auto; max-height: 340px; }
+
+.erp-no-results {
+  padding: 2.5rem 1.25rem; text-align: center;
+  font-size: .85rem; color: #94a3b8;
+}
+
+.erp-cxc-row {
+  display: flex; align-items: center; gap: .9rem;
+  padding: .8rem 1.25rem; cursor: pointer;
+  border-bottom: 1px solid #f1f5f9;
+  transition: background .08s;
+  user-select: none;
+}
+.erp-cxc-row:hover { background: #f8faff; }
+.erp-cxc-row:last-child { border-bottom: none; }
+.erp-cxc-linked { background: #f0fdf4 !important; }
+.erp-cxc-linked:hover { background: #dcfce7 !important; }
+
+/* Checkbox visual */
+.erp-check {
+  width: 18px; height: 18px; flex-shrink: 0;
+  border: 2px solid #cbd5e1; border-radius: 5px;
+  display: flex; align-items: center; justify-content: center;
+  transition: background .12s, border-color .12s;
+}
+.erp-check-on { background: #22c55e; border-color: #22c55e; }
+
+/* Columna info */
+.erp-cxc-info { flex: 1; min-width: 0; }
+.erp-cxc-top {
+  display: flex; align-items: center; gap: .5rem; margin-bottom: .2rem;
+}
+.erp-cxc-folio {
+  font-size: .85rem; font-weight: 700; color: #1e293b;
+  letter-spacing: .01em;
+}
+.erp-cxc-tipo {
+  font-size: .65rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .05em; color: #6d28d9;
+  background: #ede9fe; border-radius: 4px;
+  padding: .1rem .35rem; white-space: nowrap;
+}
+.erp-cxc-id-small {
+  font-size: .68rem; color: #94a3b8; font-family: monospace;
+  letter-spacing: .01em; margin-top: .15rem;
+}
+.erp-cxc-id-label {
+  font-weight: 700; color: #64748b; font-family: inherit;
+  margin-right: .15rem;
+}
+
+/* Columna importes */
+.erp-cxc-right { text-align: right; flex-shrink: 0; min-width: 130px; }
+.erp-cxc-saldo {
+  font-size: .95rem; font-weight: 800; color: #0f172a;
+  margin-bottom: .22rem; letter-spacing: -.01em;
+}
+.erp-cxc-amounts {
+  display: flex; align-items: center; justify-content: flex-end;
+  flex-wrap: wrap; gap: .1rem; margin-bottom: .18rem;
+}
+.erp-amt-item {
+  display: inline-flex; align-items: baseline; gap: .2rem;
+  font-size: .65rem; color: #374151; white-space: nowrap;
+}
+.erp-amt-label {
+  font-weight: 700; color: #94a3b8; text-transform: uppercase;
+  letter-spacing: .04em; font-size: .6rem;
+}
+.erp-amt-sep { color: #cbd5e1; font-size: .6rem; }
+.erp-cxc-fecha {
+  font-size: .68rem; color: #94a3b8;
+  display: flex; align-items: center; justify-content: flex-end; gap: .25rem;
+}
+.erp-cxc-fecha::before {
+  content: '';
+  width: 4px; height: 4px; border-radius: 50%;
+  background: #cbd5e1; flex-shrink: 0;
+}
+
+/* Footer */
+.erp-count-msg {
+  font-size: .8rem; font-weight: 600; color: #15803d;
+}
+
+/* ══ MODAL UUID — Nuevo diseño ══════════════════════════════════════════════ */
+.uuid-modal-box { max-width: 640px; }
+
+/* Tira de contexto del movimiento */
+.uuid-mov-strip {
+  display: flex; align-items: center; justify-content: space-between; gap: .75rem;
+  padding: .7rem 1.4rem; background: #f8faff; border-bottom: 1px solid #e8edf5;
+}
+.uuid-mov-left  { display: flex; flex-direction: column; gap: .2rem; min-width: 0; flex: 1; }
+.uuid-mov-concepto {
+  font-size: .875rem; font-weight: 600; color: #111827;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.uuid-mov-meta {
+  display: flex; align-items: center; gap: .3rem; font-size: .75rem; color: #9ca3af;
+}
+.uuid-mov-monto { font-size: 1rem; font-weight: 700; white-space: nowrap; flex-shrink: 0; }
+
+/* Barra de CFDI seleccionado */
+.uuid-selected-bar {
+  display: flex; align-items: flex-start; gap: .75rem;
+  padding: .65rem 1.4rem; background: #f0fdf4; border-bottom: 1px solid #bbf7d0;
+}
+.uuid-sel-icon {
+  width: 22px; height: 22px; border-radius: 50%; background: #dcfce7;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: .15rem;
+}
+.uuid-sel-body    { flex: 1; min-width: 0; }
+.uuid-sel-uuid    { font-family: monospace; font-size: .78rem; color: #15803d; font-weight: 600; word-break: break-all; margin-bottom: .15rem; }
+.uuid-sel-info    { font-size: .78rem; color: #4b5563; display: flex; align-items: center; flex-wrap: wrap; gap: .35rem; }
+.uuid-sel-arrow   { color: #9ca3af; }
+.uuid-sel-total   { font-weight: 700; color: #0f172a; }
+.uuid-sel-clear {
+  background: none; border: none; cursor: pointer; color: #86efac;
+  width: 22px; height: 22px; display: flex; align-items: center; justify-content: center;
+  border-radius: 4px; flex-shrink: 0; transition: color .1s, background .1s; padding: 0;
+}
+.uuid-sel-clear:hover { color: #15803d; background: #dcfce7; }
+
+/* Buscador */
+.uuid-search-wrap {
+  display: flex; align-items: center; gap: .5rem;
+  padding: .65rem 1.25rem; border-bottom: 1px solid #f3f4f6;
+}
+.uuid-search-icon   { flex-shrink: 0; }
+.uuid-search-input  {
+  flex: 1; border: none; outline: none; font-size: .875rem; color: #111827; background: transparent;
+}
+.uuid-search-input::placeholder { color: #9ca3af; }
+.uuid-search-clear  {
+  background: none; border: none; cursor: pointer; color: #9ca3af; font-size: .85rem; padding: 0 2px; transition: color .1s;
+}
+.uuid-search-clear:hover { color: #374151; }
+
+/* Lista de CFDIs */
+.uuid-cfdi-list {
+  overflow-y: auto; max-height: 300px; border-bottom: 1px solid #f3f4f6;
+}
+.uuid-list-state {
+  display: flex; align-items: center; justify-content: center; gap: .6rem;
+  padding: 2rem 1.25rem; font-size: .85rem; color: #9ca3af;
+}
+.uuid-list-empty { flex-direction: column; gap: .5rem; }
+
+/* Fila individual de CFDI */
+.uuid-cfdi-row {
+  display: flex; align-items: flex-start; gap: .85rem;
+  padding: .75rem 1.25rem; cursor: pointer;
+  border-bottom: 1px solid #f9fafb; transition: background .08s;
+}
+.uuid-cfdi-row:last-child  { border-bottom: none; }
+.uuid-cfdi-row:hover       { background: #f8faff; }
+.uuid-cfdi-selected {
+  background: #f0fdf4 !important;
+  border-left: 3px solid #22c55e;
+  padding-left: calc(1.25rem - 3px);
+}
+.uuid-cfdi-match            { background: #fafff6; }
+.uuid-cfdi-match:hover      { background: #f0fdf4 !important; }
+
+/* Checkbox de selección */
+.uuid-check {
+  width: 18px; height: 18px; flex-shrink: 0; margin-top: .2rem;
+  border: 2px solid #d1d5db; border-radius: 5px;
+  display: flex; align-items: center; justify-content: center;
+  transition: background .12s, border-color .12s;
+}
+.uuid-check-on { background: #22c55e; border-color: #22c55e; }
+
+/* Cuerpo de la fila */
+.uuid-cfdi-body       { flex: 1; min-width: 0; }
+.uuid-cfdi-top-row    { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; margin-bottom: .3rem; }
+.uuid-cfdi-uuid-badge {
+  font-family: monospace; font-size: .74rem; font-weight: 600;
+  background: #f1f5f9; color: #475569; padding: .1rem .4rem; border-radius: 4px; letter-spacing: .02em;
+}
+.uuid-tipo-badge {
+  font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+  background: #ede9fe; color: #6d28d9; padding: .1rem .4rem; border-radius: 4px;
+}
+.uuid-sat-badge { font-size: .68rem; font-weight: 600; padding: .1rem .4rem; border-radius: 4px; }
+.sat-vigente    { background: #dcfce7; color: #15803d; }
+.sat-cancelado  { background: #fee2e2; color: #b91c1c; }
+.sat-other      { background: #f1f5f9; color: #6b7280; }
+.sat-unknown    { background: #fefce8; color: #854d0e; }
+.uuid-match-badge {
+  display: inline-flex; align-items: center; gap: .25rem;
+  font-size: .68rem; font-weight: 700; color: #15803d;
+  background: #dcfce7; padding: .1rem .45rem; border-radius: 4px;
+}
+.uuid-cfdi-parties {
+  display: flex; align-items: center; gap: .35rem; min-width: 0;
+}
+.uuid-party-name {
+  font-size: .8rem; color: #374151; font-weight: 500;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 165px;
+}
+.uuid-receptor { color: #6b7280; }
+
+/* Monto y fecha (columna derecha) */
+.uuid-cfdi-right  { text-align: right; flex-shrink: 0; }
+.uuid-cfdi-total  { font-size: .88rem; font-weight: 700; color: #111827; }
+.uuid-total-match { color: #15803d; }
+.uuid-cfdi-fecha  { font-size: .72rem; color: #9ca3af; margin-top: .1rem; }
+
+/* Entrada manual (colapsable) */
+.uuid-manual-section { border-top: 1px solid #f3f4f6; background: #fafafa; }
+.uuid-manual-toggle {
+  display: flex; align-items: center; gap: .4rem; width: 100%;
+  background: none; border: none; cursor: pointer; text-align: left;
+  padding: .6rem 1.25rem; font-size: .78rem; color: #6b7280; font-weight: 500;
+  transition: color .12s, background .12s;
+}
+.uuid-manual-toggle:hover { background: #f3f4f6; color: #374151; }
+.uuid-manual-body {
+  padding: .4rem 1.25rem .75rem; display: flex; flex-direction: column; gap: .35rem;
+}
+
+/* Aviso inline (dentro del modal, no ocupa modal-body) */
+.uuid-warning-inline {
+  margin: 0 1.25rem .5rem; font-size: .75rem;
+}
+
+/* Badge "Ya vinculado" en fila de CFDI */
+.uuid-linked-badge {
+  display: inline-flex; align-items: center; gap: .25rem;
+  font-size: .68rem; font-weight: 700; color: #92400e;
+  background: #fef3c7; border: 1px solid #fde68a;
+  padding: .1rem .4rem; border-radius: 4px; cursor: help;
+}
+
+/* Toggle al pie de la lista */
+.uuid-occupied-toggle {
+  display: flex; justify-content: center;
+  padding: .45rem .75rem; border-top: 1px dashed #e5e7eb;
+  background: #fafafa;
+}
+.uuid-occupied-btn {
+  display: inline-flex; align-items: center; gap: .35rem;
+  background: none; border: none; cursor: pointer;
+  font-size: .75rem; color: #6366f1; font-weight: 600;
+  padding: .2rem .5rem; border-radius: 5px; transition: background .12s;
+}
+.uuid-occupied-btn:hover { background: #eef2ff; }
+
+/* Botón desvincular UUID (tabla + panel) */
+.btn-uuid-unlink {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px;
+  background: #fff0f0; border: 1px solid #fecaca; border-radius: 5px;
+  color: #dc2626; cursor: pointer; padding: 0; flex-shrink: 0;
+  transition: background .12s, border-color .12s;
+}
+.btn-uuid-unlink:hover:not(:disabled) { background: #fee2e2; border-color: #f87171; }
+.btn-uuid-unlink:disabled { opacity: .4; cursor: not-allowed; }
+
+/* Botón "← Volver" en el header del modo vinculados */
+.uuid-back-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; border-radius: 7px;
+  background: #f1f5f9; border: 1px solid #e2e8f0;
+  color: #475569; cursor: pointer; flex-shrink: 0;
+  transition: background .12s, color .12s;
+}
+.uuid-back-btn:hover { background: #e2e8f0; color: #1e293b; }
+
+/* Botón toggle "N vinculados" en header del modal UUID */
+.uuid-panel-toggle-btn {
+  display: inline-flex; align-items: center; gap: .35rem;
+  font-size: .74rem; font-weight: 600; color: #6366f1;
+  background: #eef2ff; border: 1px solid #c7d2fe;
+  padding: .28rem .65rem; border-radius: 7px; cursor: pointer;
+  transition: background .12s, border-color .12s; white-space: nowrap;
+}
+.uuid-panel-toggle-btn:hover { background: #e0e7ff; border-color: #a5b4fc; }
+
+/* Lista de tarjetas (modo UUID vinculados) */
+.uuid-linked-full-list {
+  padding: .85rem 1.25rem; display: flex; flex-direction: column;
+  gap: .65rem; overflow-y: auto; flex: 1;
+}
+.uuid-linked-empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: .6rem; padding: 3rem 1.5rem; font-size: .875rem; color: #9ca3af; text-align: center;
+}
+
+/* Tarjeta de movimiento vinculado */
+.ulc-card {
+  border: 1px solid #e5e7eb; border-radius: 10px;
+  padding: .9rem 1rem; background: #fff;
+  display: flex; flex-direction: column; gap: .55rem;
+  transition: box-shadow .12s, border-color .12s;
+}
+.ulc-card:hover { box-shadow: 0 2px 12px rgba(99,102,241,.09); border-color: #c7d2fe; }
+
+/* UUID completo */
+.ulc-uuid-row   { display: flex; align-items: center; gap: .5rem; }
+.ulc-uuid-label {
+  font-size: .65rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .08em; color: #9ca3af; flex-shrink: 0;
+}
+.ulc-uuid-val {
+  font-family: monospace; font-size: .82rem; font-weight: 600;
+  color: #1d4ed8; background: #dbeafe;
+  padding: .22rem .55rem; border-radius: 6px;
+  word-break: break-all; user-select: all; cursor: text; line-height: 1.4;
+  flex: 1;
+}
+
+/* Chips de metadatos */
+.ulc-meta-row { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
+.ulc-folio-chip {
+  font-size: .7rem; font-weight: 700; background: #ede9fe; color: #6d28d9;
+  padding: .18rem .5rem; border-radius: 5px;
+}
+.ulc-banco-chip { font-size: .7rem; font-weight: 700; padding: .18rem .5rem; border-radius: 5px; }
+.ulc-status-chip { font-size: .7rem; font-weight: 600; padding: .18rem .5rem; border-radius: 5px; }
+.ulc-date-chip {
+  display: inline-flex; align-items: center; gap: .25rem;
+  font-size: .72rem; color: #9ca3af;
+}
+
+/* Concepto */
+.ulc-concepto { font-size: .855rem; color: #374151; line-height: 1.45; word-break: break-word; }
+
+/* Pie de tarjeta */
+.ulc-foot {
+  display: flex; align-items: center; justify-content: space-between; gap: .75rem;
+  padding-top: .55rem; border-top: 1px solid #f3f4f6;
+}
+.ulc-monto-wrap  { display: flex; flex-direction: column; gap: .1rem; }
+.ulc-monto-label { font-size: .68rem; color: #9ca3af; text-transform: uppercase; letter-spacing: .05em; }
+.ulc-monto       { font-size: 1rem; font-weight: 700; }
+
+/* Botón Desvincular en tarjeta */
+.btn-ulc-unlink {
+  display: inline-flex; align-items: center; gap: .4rem;
+  font-size: .8rem; font-weight: 600; color: #dc2626;
+  background: #fff0f0; border: 1px solid #fecaca;
+  padding: .38rem .9rem; border-radius: 7px; cursor: pointer;
+  transition: background .12s, border-color .12s; white-space: nowrap;
+}
+.btn-ulc-unlink:hover:not(:disabled) { background: #fee2e2; border-color: #f87171; }
+.btn-ulc-unlink:disabled { opacity: .4; cursor: not-allowed; }
+
+/* Advertencia de override */
+.uuid-override-warn {
+  display: flex; align-items: flex-start; gap: .6rem;
+  margin: 0 1.25rem; padding: .65rem .85rem;
+  background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px;
+  font-size: .8rem; color: #92400e; line-height: 1.5;
+}
+.uuid-override-warn code {
+  font-family: monospace; font-size: .78rem;
+  background: #fef3c7; padding: .05rem .3rem; border-radius: 3px;
+}
 </style>
