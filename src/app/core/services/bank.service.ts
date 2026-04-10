@@ -4,6 +4,13 @@ import { ApiService } from './api.service';
 
 export type BankStatus = 'no_identificado' | 'identificado' | 'otros';
 
+export interface ErpLink {
+  erpId:       string;
+  saldoActual: number;
+  total:       number;
+  folioFiscal: string | null;
+}
+
 export interface BankMovement {
   _id:                string;
   banco:              'Banamex' | 'BBVA' | 'Santander' | 'Azteca';
@@ -19,6 +26,8 @@ export interface BankMovement {
   folio:              string | null;
   uuidXML:            string | null;
   erpIds:             string[];
+  erpLinks:           ErpLink[];
+  saldoErp:           number | null;
   createdAt:          string;
 }
 
@@ -64,10 +73,11 @@ export interface BankFilter {
   fechaFin?:    string;
   tipo?:        string;
   search?:      string;
+  concepto?:    string;
   sortBy?:      string;
   sortDir?:     string;
   status?:      string;
-  categoria?:   string;
+  categorias?:  string;   // comma-separated; __null__ = sin categoría
 }
 
 export interface ErpCxC {
@@ -80,95 +90,7 @@ export interface ErpCxC {
   total:            number;
   saldoActual:      number;
   fechaVencimiento: string | null;
-}
-
-export interface CxcSnapshot {
-  _id:              string;
-  erpId:            string;
-  serie:            string;
-  folio:            string;
-  tipoPago:         string | null;
-  subtotal:         number;
-  impuesto:         number;
-  total:            number;
-  saldoActual:      number;
-  fechaVencimiento: string | null;
-  is_vinculated:    boolean;
-  snapshotAt:       string;
-}
-
-export type MatchType =
-  | 'exacto'
-  | 'cercano'
-  | 'folio_en_concepto'
-  | 'referencia_numerica'
-  | 'numero_autorizacion';
-
-export interface CxcMatchMovement {
-  _id:               string;
-  banco:             string;
-  fecha:             string;
-  concepto:          string;
-  deposito:          number;
-  capacidadRestante: number;
-  comprometido:      number;
-  status:            string;
-  folio:             string | null;
-  uuidXML:           string | null;
-  erpIds:            string[];
-  referenciaNumerica: string | null;
-  categoria:         string | null;
-  matchType:         MatchType;
-  score:             number;
-  diferencia:        number;
-  daysFromVenc:      number | null;
-  esConflicto:       boolean;
-}
-
-export interface CxcMatchResult {
-  cxc:     CxcSnapshot;
-  matches: CxcMatchMovement[];
-}
-
-// ── Matching combinacional (1 depósito ↔ N CxC) ───────────────────────────────
-
-export interface CxcCombRef {
-  _id:              string;
-  erpId:            string;
-  serie:            string;
-  folio:            string;
-  saldoActual:      number;
-  fechaVencimiento: string | null;
-}
-
-export interface CombinacionalOpcion {
-  cxcs:       CxcCombRef[];
-  sumaSaldos: number;
-  diferencia: number;
-  score:      number;
-}
-
-export interface CombinacionalDeposito {
-  _id:               string;
-  banco:             string;
-  fecha:             string;
-  concepto:          string;
-  deposito:          number;
-  capacidadRestante: number;
-  comprometido:      number;
-  referenciaNumerica: string | null;
-  categoria:         string | null;
-  folio:             string | null;
-}
-
-export interface CombinacionalResult {
-  deposito: CombinacionalDeposito;
-  opciones: CombinacionalOpcion[];
-}
-
-export interface CxcMatchesResponse {
-  individual:      CxcMatchResult[];
-  combinacionales: CombinacionalResult[];
+  folioFiscal?:     string | null;
 }
 
 export interface AuxClienteSummary {
@@ -185,6 +107,25 @@ export interface AuxApplyResult {
   actualizados: number;
   noEncontrados: number;
   total:        number;
+}
+
+export type RuleCampo    = 'concepto' | 'deposito' | 'retiro' | 'referenciaNumerica' | 'numeroAutorizacion';
+export type RuleOperador = 'contiene' | 'no_contiene' | 'igual' | 'empieza_con' | 'termina_con' | 'mayor_que' | 'menor_que' | 'mayor_igual' | 'menor_igual';
+
+export interface BankRuleCondicion {
+  campo:    RuleCampo;
+  operador: RuleOperador;
+  valor:    string;
+}
+
+export interface BankRule {
+  _id:         string;
+  banco:       string;
+  nombre:      string;
+  condiciones: BankRuleCondicion[];
+  logica:      'Y' | 'O';
+  orden:       number;
+  createdAt:   string;
 }
 
 export interface UploadResult {
@@ -223,24 +164,12 @@ export class BankService {
     return this.api.patch(`/banks/movements/${id}/status`, { status });
   }
 
-  setUuidXML(id: string, uuidXML: string): Observable<{ _id: string; uuidXML: string; status: BankStatus }> {
-    return this.api.patch(`/banks/movements/${id}/uuid`, { uuidXML });
-  }
-
-  unlinkUuid(id: string): Observable<{ _id: string; uuidXML: null; status: BankStatus }> {
-    return this.api.delete(`/banks/movements/${id}/uuid`);
-  }
-
-  addErpId(id: string, erpId: string): Observable<{ _id: string; erpIds: string[] }> {
-    return this.api.patch(`/banks/movements/${id}/erp-ids`, { action: 'add', erpId });
-  }
-
-  removeErpId(id: string, erpId: string): Observable<{ _id: string; erpIds: string[] }> {
+  removeErpId(id: string, erpId: string): Observable<{ _id: string; erpIds: string[]; erpLinks: ErpLink[]; saldoErp: number | null; uuidXML: string | null; status: BankStatus }> {
     return this.api.patch(`/banks/movements/${id}/erp-ids`, { action: 'remove', erpId });
   }
 
-  setErpIds(id: string, erpIds: string[]): Observable<{ _id: string; erpIds: string[] }> {
-    return this.api.put(`/banks/movements/${id}/erp-ids`, { erpIds });
+  setErpIds(id: string, erpLinks: ErpLink[]): Observable<{ _id: string; erpIds: string[]; erpLinks: ErpLink[]; saldoErp: number | null; uuidXML: string | null; status: BankStatus }> {
+    return this.api.put(`/banks/movements/${id}/erp-ids`, { erpLinks });
   }
 
   getBankConfig(banco: string): Observable<BankConfig> {
@@ -267,11 +196,34 @@ export class BankService {
     return this.api.get('/banks/auxiliar/movimientos', params);
   }
 
-  listErpCuentas(fechaDesde: string, fechaHasta: string): Observable<ErpCxC[]> {
-    return this.api.get('/erp/cuentas-pendientes', { fechaDesde, fechaHasta });
+  listCategories(banco: string): Observable<(string | null)[]> {
+    return this.api.get('/banks/categories', { banco });
   }
 
-  getCxcMatches(): Observable<CxcMatchesResponse> {
-    return this.api.get('/erp/cxc-matches');
+  listRules(banco: string): Observable<BankRule[]> {
+    return this.api.get('/banks/rules', { banco });
   }
+
+  createRule(banco: string, data: Omit<BankRule, '_id' | 'banco' | 'createdAt'>): Observable<BankRule> {
+    return this.api.post('/banks/rules', { banco, ...data });
+  }
+
+  updateRule(id: string, data: Omit<BankRule, '_id' | 'banco' | 'createdAt'>): Observable<BankRule> {
+    return this.api.put(`/banks/rules/${id}`, data);
+  }
+
+  deleteRule(id: string): Observable<{ deleted: boolean }> {
+    return this.api.delete(`/banks/rules/${id}`);
+  }
+
+  applyRules(banco: string, soloSinCategoria = false): Observable<{ actualizados: number; sinCambio: number }> {
+    return this.api.post('/banks/rules/apply', { banco, soloSinCategoria });
+  }
+
+  listErpCuentas(fechaDesde: string, fechaHasta: string, soloXPendientes = true): Observable<ErpCxC[]> {
+    const params: Record<string, unknown> = { fechaDesde, fechaHasta };
+    if (soloXPendientes) params['estadoCobro'] = 'pendiente';
+    return this.api.get('/erp/cuentas-pendientes', params);
+  }
+
 }
