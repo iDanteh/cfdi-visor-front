@@ -3,8 +3,8 @@ import { FormBuilder, FormGroup } from '@angular/forms';
 import { merge, Subject } from 'rxjs';
 import { debounceTime, distinctUntilChanged, switchMap, takeUntil } from 'rxjs/operators';
 import {
-  BankService, BankMovement, BankCard, BankFilter, BankStatus, ErpCxC,
-  AuxClienteSummary, AuxApplyResult,
+  BankService, BankMovement, BankCard, BankFilter, BankStatus, ErpCxC, ErpLink,
+  AuxClienteSummary, AuxApplyResult, BankRule, BankRuleCondicion, RuleCampo, RuleOperador,
 } from '../../core/services/bank.service';
 
 type ViewMode  = 'cards' | 'detail' | 'auxiliar';
@@ -17,6 +17,8 @@ type SortField = 'fecha' | 'banco' | 'deposito' | 'retiro';
   templateUrl: './banks.component.html',
 })
 export class BanksComponent implements OnInit, OnDestroy {
+
+  readonly Math = Math;
 
   // ── Vista ───────────────────────────────────────────────────────────────────
   view: ViewMode = 'cards';
@@ -32,8 +34,13 @@ export class BanksComponent implements OnInit, OnDestroy {
   loading    = false;
 
   // ── Filtros activos (detalle) ───────────────────────────────────────────────
-  activeStatus:    string = '';
-  activeCategoria: string = '';
+  activeStatus:       string = '';
+  conceptoFilter:     string = '';
+  showConceptoFilter  = false;
+  showCategoriaFilter  = false;
+  availableCategorias: (string | null)[] = [];
+  selectedCategorias:  string[] = [];   // '__null__' represents null/sin categoría
+  categoriasLoading    = false;
   filterForm: FormGroup;
   sortField: SortField = 'fecha';
   sortDir:   SortDir   = 'desc';
@@ -73,15 +80,6 @@ export class BanksComponent implements OnInit, OnDestroy {
   numeroCuentaInput = '';
   savingCuenta     = false;
 
-  // ── Modal UUID ──────────────────────────────────────────────────────────────
-  showUuidModal     = false;
-  uuidModalMovement: BankMovement | null = null;
-  uuidInput         = '';
-  savingUuid        = false;
-  uuidError: string | null = null;
-  showLinkedPanel   = false;
-  unlinkingId: string | null = null;
-
   // ── Modal IDs ERP ────────────────────────────────────────────────────────────
   showErpModal      = false;
   erpModalMovement: BankMovement | null = null;
@@ -90,7 +88,45 @@ export class BanksComponent implements OnInit, OnDestroy {
   erpLoading        = false;
   erpError: string | null = null;
   erpSaving         = false;
+  erpSoloPendientes = true;
   private erpIdsOriginal: string[] = [];
+
+  // ── Panel de reglas de categorización ────────────────────────────────────────
+  showRulesPanel    = false;
+  rules:            BankRule[] = [];
+  rulesLoading      = false;
+  applyingRules     = false;
+  applyRulesResult: { actualizados: number; sinCambio: number } | null = null;
+  applyRulesError:  string | null = null;
+
+  // Formulario de regla (crear / editar)
+  showRuleForm   = false;
+  editingRuleId: string | null = null;
+  ruleNombre     = '';
+  ruleLogica:    'Y' | 'O' = 'Y';
+  ruleCondiciones: { campo: RuleCampo; operador: RuleOperador; valor: string }[] = [];
+  savingRule     = false;
+  ruleError:     string | null = null;
+
+  readonly CAMPOS_REGLA: { value: RuleCampo; label: string }[] = [
+    { value: 'concepto',           label: 'Concepto' },
+    { value: 'deposito',           label: 'Depósito' },
+    { value: 'retiro',             label: 'Retiro' },
+    { value: 'referenciaNumerica', label: 'Referencia' },
+    { value: 'numeroAutorizacion', label: 'Autorización' },
+  ];
+
+  readonly OPERADORES_REGLA: { value: RuleOperador; label: string; numerico?: boolean }[] = [
+    { value: 'contiene',    label: 'contiene' },
+    { value: 'no_contiene', label: 'no contiene' },
+    { value: 'igual',       label: 'igual a' },
+    { value: 'empieza_con', label: 'empieza con' },
+    { value: 'termina_con', label: 'termina con' },
+    { value: 'mayor_que',   label: 'mayor que',   numerico: true },
+    { value: 'menor_que',   label: 'menor que',   numerico: true },
+    { value: 'mayor_igual', label: 'mayor o igual', numerico: true },
+    { value: 'menor_igual', label: 'menor o igual', numerico: true },
+  ];
 
   // Rango de fechas para consultar el ERP (por defecto: mes actual)
   erpFechaDesde = this.defaultFechaDesde();
@@ -124,11 +160,6 @@ export class BanksComponent implements OnInit, OnDestroy {
   // ── Catálogos ───────────────────────────────────────────────────────────────
   readonly bancos = ['BBVA', 'Banamex', 'Santander', 'Azteca'];
 
-  readonly categorias = [
-    'Transferencia', 'Nómina', 'Depósitos', 'Cheque', 'Compra', 'Pago cuenta de tercero',
-    'Retiro ATM', 'Cargo bancario', 'Pago de servicio', 'Cobro tarjeta', 'Traspaso',
-  ];
-
   readonly bancoAccent: Record<string, string> = {
     BBVA:      '#004B93',
     Banamex:   '#B22222',
@@ -155,8 +186,9 @@ export class BanksComponent implements OnInit, OnDestroy {
     'Traspaso':          { bg: '#faf5ff', color: '#7e22ce' },
   };
 
-  private destroy$     = new Subject<void>();
-  private loadTrigger$ = new Subject<BankFilter>();
+  private destroy$       = new Subject<void>();
+  private loadTrigger$   = new Subject<BankFilter>();
+  private conceptoFilter$ = new Subject<string>();
 
   constructor(private bankService: BankService, private fb: FormBuilder) {
     this.filterForm = this.fb.group({
@@ -172,17 +204,6 @@ export class BanksComponent implements OnInit, OnDestroy {
   get activeCard(): BankCard | null {
     if (!this.activeBanco) return null;
     return this.bankCards.find(c => c.banco === this.activeBanco) ?? null;
-  }
-
-  get saldoDinamico(): { label: string; amount: number } {
-    const c = this.activeCard;
-    if (!c) return { label: 'Saldo', amount: 0 };
-    switch (this.activeStatus) {
-      case 'no_identificado': return { label: 'No identificados', amount: c.saldoPendiente };
-      case 'identificado':    return { label: 'Identificados',    amount: c.saldoIdentificado };
-      case 'otros':           return { label: 'Otros',            amount: c.saldoOtros };
-      default:                return { label: 'Saldo total',      amount: c.totalDepositos - c.totalRetiros };
-    }
   }
 
   // ── Ciclo de vida ───────────────────────────────────────────────────────────
@@ -208,6 +229,13 @@ export class BanksComponent implements OnInit, OnDestroy {
       takeUntil(this.destroy$),
     ).subscribe(() => this.loadMovements(1));
 
+    this.conceptoFilter$.pipe(
+      debounceTime(400),
+      distinctUntilChanged(),
+      takeUntil(this.destroy$),
+    ).subscribe(() => this.loadMovements(1));
+
+
     merge(
       this.filterForm.get('tipo')!.valueChanges,
       this.filterForm.get('fechaInicio')!.valueChanges,
@@ -227,10 +255,15 @@ export class BanksComponent implements OnInit, OnDestroy {
   // ── Navegación ──────────────────────────────────────────────────────────────
 
   openBank(banco: string): void {
-    this.activeBanco     = banco;
-    this.view            = 'detail';
-    this.activeStatus    = '';
-    this.activeCategoria = '';
+    this.activeBanco        = banco;
+    this.view               = 'detail';
+    this.activeStatus       = '';
+    this.conceptoFilter      = '';
+    this.selectedCategorias  = [];
+    this.availableCategorias = [];
+    this.showConceptoFilter  = false;
+    this.showCategoriaFilter = false;
+    this.showRulesPanel      = false;
     this.filterForm.reset({ search: '', tipo: '', fechaInicio: '', fechaFin: '' });
     this.loadMovements(1);
   }
@@ -258,13 +291,14 @@ export class BanksComponent implements OnInit, OnDestroy {
     const filters: BankFilter = {
       page,
       limit:       this.pagination.limit,
-      banco:       this.activeBanco    || undefined,
-      search:      search              || undefined,
-      tipo:        tipo                || undefined,
-      fechaInicio: fechaInicio         || undefined,
-      fechaFin:    fechaFin            || undefined,
-      status:      this.activeStatus   || undefined,
-      categoria:   this.activeCategoria || undefined,
+      banco:       this.activeBanco     || undefined,
+      search:      search               || undefined,
+      tipo:        tipo                 || undefined,
+      fechaInicio: fechaInicio          || undefined,
+      fechaFin:    fechaFin             || undefined,
+      status:      this.activeStatus    || undefined,
+      concepto:    this.conceptoFilter || undefined,
+      categorias:  this.selectedCategorias.length ? this.selectedCategorias.join(',') : undefined,
       sortBy:      this.sortField,
       sortDir:     this.sortDir,
     };
@@ -277,13 +311,59 @@ export class BanksComponent implements OnInit, OnDestroy {
   hasActiveFilters(): boolean {
     const v = this.filterForm.value;
     return !!(v.search || v.tipo || v.fechaInicio || v.fechaFin
-              || this.activeStatus || this.activeCategoria);
+              || this.activeStatus || this.conceptoFilter || this.selectedCategorias.length);
   }
 
   clearFilters(): void {
-    this.activeStatus    = '';
-    this.activeCategoria = '';
+    this.activeStatus      = '';
+    this.conceptoFilter    = '';
+    this.selectedCategorias = [];
     this.filterForm.reset({ search: '', tipo: '', fechaInicio: '', fechaFin: '' });
+    this.conceptoFilter$.next('');
+  }
+
+  onConceptoFilterChange(): void {
+    this.conceptoFilter$.next(this.conceptoFilter);
+  }
+
+  openCategoriaFilter(): void {
+    this.showCategoriaFilter = !this.showCategoriaFilter;
+    if (this.showCategoriaFilter && this.availableCategorias.length === 0) {
+      this.loadAvailableCategorias();
+    }
+  }
+
+  loadAvailableCategorias(): void {
+    if (!this.activeBanco) return;
+    this.categoriasLoading = true;
+    this.bankService.listCategories(this.activeBanco).pipe(takeUntil(this.destroy$)).subscribe({
+      next: (cats) => { this.availableCategorias = cats; this.categoriasLoading = false; },
+      error: ()    => { this.categoriasLoading = false; },
+    });
+  }
+
+  isCategoriaSelected(cat: string | null): boolean {
+    return this.selectedCategorias.includes(cat === null ? '__null__' : cat);
+  }
+
+  toggleCategoria(cat: string | null): void {
+    const key = cat === null ? '__null__' : cat;
+    const idx = this.selectedCategorias.indexOf(key);
+    if (idx >= 0) {
+      this.selectedCategorias.splice(idx, 1);
+    } else {
+      this.selectedCategorias.push(key);
+    }
+    this.loadMovements(1);
+  }
+
+  clearCategoriaFilter(): void {
+    this.selectedCategorias = [];
+    this.loadMovements(1);
+  }
+
+  get allCategoriaSelected(): boolean {
+    return this.selectedCategorias.length === 0;
   }
 
   // ── Ordenamiento ────────────────────────────────────────────────────────────
@@ -547,80 +627,6 @@ export class BanksComponent implements OnInit, OnDestroy {
 
   // ── Modal UUID CFDI ─────────────────────────────────────────────────────────
 
-  openUuidModal(mov: BankMovement, event: Event): void {
-    event.stopPropagation();
-    this.uuidModalMovement = mov;
-    this.uuidInput         = '';
-    this.uuidError         = null;
-    this.savingUuid        = false;
-    this.showLinkedPanel   = false;
-    this.unlinkingId       = null;
-    this.showUuidModal     = true;
-  }
-
-  closeUuidModal(): void {
-    this.showUuidModal     = false;
-    this.uuidModalMovement = null;
-    this.showLinkedPanel   = false;
-    this.unlinkingId       = null;
-  }
-
-  // Movimientos del banco activo que ya tienen UUID vinculado
-  get linkedMovements(): BankMovement[] {
-    return this.movements.filter(m => !!m.uuidXML);
-  }
-
-  unlinkUuidFromRow(mov: BankMovement, event: Event): void {
-    event.stopPropagation();
-    if (this.unlinkingId === mov._id) return;
-    this.unlinkingId = mov._id;
-    this.bankService.unlinkUuid(mov._id).pipe(takeUntil(this.destroy$)).subscribe({
-      next: (res) => {
-        mov.uuidXML = res.uuidXML;
-        mov.status  = res.status;
-        this.unlinkingId = null;
-        this.loadCards();
-      },
-      error: () => { this.unlinkingId = null; },
-    });
-  }
-
-  unlinkUuidFromPanel(mov: BankMovement): void {
-    if (this.unlinkingId === mov._id) return;
-    this.unlinkingId = mov._id;
-    this.bankService.unlinkUuid(mov._id).pipe(takeUntil(this.destroy$)).subscribe({
-      next: (res) => {
-        mov.uuidXML = res.uuidXML;
-        mov.status  = res.status;
-        this.unlinkingId = null;
-        this.loadCards();
-      },
-      error: () => { this.unlinkingId = null; },
-    });
-  }
-
-  confirmUuid(): void {
-    const uuid = this.uuidInput.trim();
-    if (!this.uuidModalMovement || !uuid || this.savingUuid) return;
-    this.savingUuid = true;
-    this.uuidError  = null;
-    this.bankService.setUuidXML(this.uuidModalMovement._id, uuid)
-      .pipe(takeUntil(this.destroy$))
-      .subscribe({
-        next: (res) => {
-          this.uuidModalMovement!.uuidXML = res.uuidXML;
-          this.uuidModalMovement!.status  = res.status;
-          this.savingUuid = false;
-          this.closeUuidModal();
-          this.loadCards();
-        },
-        error: (err) => {
-          this.uuidError  = err?.error?.error || 'Error al vincular UUID';
-          this.savingUuid = false;
-        },
-      });
-  }
-
   // ── IDs ERP ─────────────────────────────────────────────────────────────────
 
   openErpModal(mov: BankMovement, event: Event): void {
@@ -648,17 +654,43 @@ export class BanksComponent implements OnInit, OnDestroy {
   confirmErp(): void {
     if (!this.erpModalMovement || this.erpSaving) return;
     this.erpSaving = true;
-    const ids = [...(this.erpModalMovement.erpIds ?? [])];
-    this.bankService.setErpIds(this.erpModalMovement._id, ids)
+    const mov = this.erpModalMovement;
+    const ids  = [...(mov.erpIds ?? [])];
+
+    // Construir erpLinks con snapshot de saldoActual y folioFiscal por cada ID seleccionado
+    const erpLinks: ErpLink[] = ids.map(erpId => {
+      const cxc = this.erpCxcList.find(c => c.id === erpId);
+      if (cxc) {
+        return {
+          erpId,
+          saldoActual: cxc.saldoActual,
+          folioFiscal: cxc.folioFiscal ?? null,
+          total: cxc.total,           // ← siempre el total del ERP
+        };
+      }
+      const prev = (mov.erpLinks ?? []).find((l: ErpLink) => l.erpId === erpId);
+      if (prev) return prev;
+
+    // Si no hay ninguna referencia, loguear el caso — no debería ocurrir
+      console.warn(`[confirmErp] erpId ${erpId} no encontrado en lista ni en links previos`);
+      return { erpId, saldoActual: 0, folioFiscal: null, total: 0 };
+    });
+
+    this.bankService.setErpIds(mov._id, erpLinks)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (res) => {
-          this.erpModalMovement!.erpIds = res.erpIds;
-          this.erpIdsOriginal           = [...res.erpIds];
-          this.erpSaving                = false;
-          this.showErpModal             = false;
-          this.erpModalMovement         = null;
-          this.erpCxcList               = [];
+          mov.erpIds   = res.erpIds;
+          mov.erpLinks = res.erpLinks;
+          mov.saldoErp = res.saldoErp;
+          mov.uuidXML  = res.uuidXML;
+          mov.status   = res.status;
+          this.erpIdsOriginal   = [...res.erpIds];
+          this.erpSaving        = false;
+          this.showErpModal     = false;
+          this.erpModalMovement = null;
+          this.erpCxcList       = [];
+          this.loadCards();
         },
         error: () => { this.erpSaving = false; },
       });
@@ -667,7 +699,7 @@ export class BanksComponent implements OnInit, OnDestroy {
   loadErpCuentas(): void {
     this.erpLoading = true;
     this.erpError   = null;
-    this.bankService.listErpCuentas(this.erpFechaDesde, this.erpFechaHasta)
+    this.bankService.listErpCuentas(this.erpFechaDesde, this.erpFechaHasta, this.erpSoloPendientes)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (list) => { this.erpCxcList = list; this.erpLoading = false; },
@@ -701,14 +733,29 @@ export class BanksComponent implements OnInit, OnDestroy {
   removeErpId(mov: BankMovement, erpId: string, event: Event): void {
     event.stopPropagation();
     this.bankService.removeErpId(mov._id, erpId).pipe(takeUntil(this.destroy$)).subscribe({
-      next: (res) => { mov.erpIds = res.erpIds; },
+      next: (res) => {
+        mov.erpIds   = res.erpIds;
+        mov.erpLinks = res.erpLinks;
+        mov.saldoErp = res.saldoErp;
+        mov.uuidXML  = res.uuidXML;
+        mov.status   = res.status;
+        this.loadCards();
+      },
     });
+  }
+
+  erpDiferencia(m: BankMovement): number | null {
+    if (!m.erpLinks?.length) return null;
+    console.log('erpLinks:', JSON.stringify(m.erpLinks));
+    const totalErp = m.erpLinks.reduce((sum, l) => sum + (l.total ?? 0), 0);
+    return (m.deposito ?? m.retiro ?? 0) - totalErp;
   }
 
   // ── Status inline ───────────────────────────────────────────────────────────
 
   cycleStatus(mov: BankMovement): void {
-    if (mov.uuidXML) return;
+    const bankAmount = mov.deposito ?? mov.retiro ?? 0;
+    if (mov.saldoErp !== null && mov.saldoErp !== undefined && Math.abs(bankAmount - mov.saldoErp) <= 1.0) return;
     const order: BankStatus[] = ['no_identificado', 'identificado', 'otros'];
     const next = order[(order.indexOf(mov.status) + 1) % order.length];
     this.bankService.updateStatus(mov._id, next).pipe(takeUntil(this.destroy$)).subscribe({
@@ -759,4 +806,122 @@ export class BanksComponent implements OnInit, OnDestroy {
   }
 
   min(a: number, b: number): number { return Math.min(a, b); }
+
+  // ── Panel de reglas de categorización ───────────────────────────────────────
+
+  openRulesPanel(): void {
+    this.showRulesPanel   = true;
+    this.showRuleForm     = false;
+    this.applyRulesResult = null;
+    this.applyRulesError  = null;
+    this.loadRules();
+  }
+
+  closeRulesPanel(): void {
+    this.showRulesPanel = false;
+    this.showRuleForm   = false;
+  }
+
+  loadRules(): void {
+    if (!this.activeBanco) return;
+    this.rulesLoading = true;
+    this.bankService.listRules(this.activeBanco).pipe(takeUntil(this.destroy$)).subscribe({
+      next: (rules) => { this.rules = rules; this.rulesLoading = false; },
+      error: ()     => { this.rulesLoading = false; },
+    });
+  }
+
+  openNewRule(): void {
+    this.editingRuleId  = null;
+    this.ruleNombre     = '';
+    this.ruleLogica     = 'Y';
+    this.ruleCondiciones = [{ campo: 'concepto', operador: 'contiene', valor: '' }];
+    this.ruleError      = null;
+    this.showRuleForm   = true;
+  }
+
+  openEditRule(rule: BankRule): void {
+    this.editingRuleId   = rule._id;
+    this.ruleNombre      = rule.nombre;
+    this.ruleLogica      = rule.logica;
+    this.ruleCondiciones = rule.condiciones.map(c => ({ ...c }));
+    this.ruleError       = null;
+    this.showRuleForm    = true;
+  }
+
+  cancelRuleForm(): void {
+    this.showRuleForm  = false;
+    this.editingRuleId = null;
+    this.ruleError     = null;
+  }
+
+  addCondicion(): void {
+    this.ruleCondiciones.push({ campo: 'concepto', operador: 'contiene', valor: '' });
+  }
+
+  removeCondicion(i: number): void {
+    this.ruleCondiciones.splice(i, 1);
+  }
+
+  saveRule(): void {
+    if (!this.activeBanco || this.savingRule) return;
+    if (!this.ruleNombre.trim()) { this.ruleError = 'El nombre es requerido'; return; }
+    if (this.ruleCondiciones.length === 0) { this.ruleError = 'Añade al menos una condición'; return; }
+    if (this.ruleCondiciones.some(c => !c.valor.trim())) { this.ruleError = 'Todos los valores son requeridos'; return; }
+
+    this.savingRule = true;
+    this.ruleError  = null;
+
+    const data = {
+      nombre:      this.ruleNombre.trim(),
+      logica:      this.ruleLogica,
+      condiciones: this.ruleCondiciones,
+      orden:       this.editingRuleId ? (this.rules.find(r => r._id === this.editingRuleId)?.orden ?? 0) : this.rules.length,
+    };
+
+    const req$ = this.editingRuleId
+      ? this.bankService.updateRule(this.editingRuleId, data)
+      : this.bankService.createRule(this.activeBanco, data);
+
+    req$.pipe(takeUntil(this.destroy$)).subscribe({
+      next: () => {
+        this.savingRule    = false;
+        this.showRuleForm  = false;
+        this.editingRuleId = null;
+        this.loadRules();
+      },
+      error: (err) => {
+        this.ruleError  = err?.error?.error || 'Error al guardar la regla';
+        this.savingRule = false;
+      },
+    });
+  }
+
+  deleteRule(rule: BankRule): void {
+    if (!confirm(`¿Eliminar la regla "${rule.nombre}"?`)) return;
+    this.bankService.deleteRule(rule._id).pipe(takeUntil(this.destroy$)).subscribe({
+      next: () => this.loadRules(),
+    });
+  }
+
+  applyRules(soloSinCategoria = false): void {
+    if (!this.activeBanco || this.applyingRules) return;
+    this.applyingRules   = true;
+    this.applyRulesResult = null;
+    this.applyRulesError  = null;
+    this.bankService.applyRules(this.activeBanco, soloSinCategoria)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (res) => {
+          this.applyRulesResult    = res;
+          this.applyingRules       = false;
+          this.availableCategorias = [];   // force reload on next filter open
+          this.loadMovements(1);
+        },
+        error: (err) => {
+          this.applyRulesError = err?.error?.error || 'Error al aplicar reglas';
+          this.applyingRules   = false;
+        },
+      });
+  }
 }

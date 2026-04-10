@@ -19,11 +19,6 @@ const routes: Routes = [
     canActivate: [AuthGuard],
     loadChildren: () => import('./features/collection-requests/collection-request.module').then(m => m.CollectionRequestModule),
   },
-  {
-    path: 'erp-matches',
-    canActivate: [AuthGuard],
-    loadChildren: () => import('./features/erp-matches/erp-matches.module').then(m => m.ErpMatchesModule),
-  },
   { path: '**', redirectTo: '/banks' },
 ];
 
