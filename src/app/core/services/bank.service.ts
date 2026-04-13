@@ -28,6 +28,7 @@ export interface BankMovement {
   erpIds:             string[];
   erpLinks:           ErpLink[];
   saldoErp:           number | null;
+  identificadoPor:    { userId: string | null; nombre: string | null; fechaId: string | null } | null;
   createdAt:          string;
 }
 
@@ -160,15 +161,15 @@ export class BankService {
     return this.api.get('/banks/summary', params);
   }
 
-  updateStatus(id: string, status: BankStatus): Observable<{ _id: string; status: BankStatus }> {
+  updateStatus(id: string, status: BankStatus): Observable<{ _id: string; status: BankStatus; identificadoPor: { userId: string | null; nombre: string | null; fechaId: string | null } | null }> {
     return this.api.patch(`/banks/movements/${id}/status`, { status });
   }
 
-  removeErpId(id: string, erpId: string): Observable<{ _id: string; erpIds: string[]; erpLinks: ErpLink[]; saldoErp: number | null; uuidXML: string | null; status: BankStatus }> {
+  removeErpId(id: string, erpId: string): Observable<{ _id: string; erpIds: string[]; erpLinks: ErpLink[]; saldoErp: number | null; uuidXML: string | null; status: BankStatus; identificadoPor: { userId: string | null; nombre: string | null; fechaId: string | null } | null }> {
     return this.api.patch(`/banks/movements/${id}/erp-ids`, { action: 'remove', erpId });
   }
 
-  setErpIds(id: string, erpLinks: ErpLink[]): Observable<{ _id: string; erpIds: string[]; erpLinks: ErpLink[]; saldoErp: number | null; uuidXML: string | null; status: BankStatus }> {
+  setErpIds(id: string, erpLinks: ErpLink[]): Observable<{ _id: string; erpIds: string[]; erpLinks: ErpLink[]; saldoErp: number | null; uuidXML: string | null; status: BankStatus; identificadoPor: { userId: string | null; nombre: string | null; fechaId: string | null } | null }> {
     return this.api.put(`/banks/movements/${id}/erp-ids`, { erpLinks });
   }
 
@@ -218,6 +219,13 @@ export class BankService {
 
   applyRules(banco: string, soloSinCategoria = false): Observable<{ actualizados: number; sinCambio: number }> {
     return this.api.post('/banks/rules/apply', { banco, soloSinCategoria });
+  }
+
+  matchAutorizaciones(file: File): Observable<{
+    total: number; matcheados: number; identificados: number; sinMatch: number;
+    noMatcheados: { autorizacion: string; importe: number; banco: string | null }[];
+  }> {
+    return this.api.uploadFiles('/banks/autorizaciones/match', [file], 'excelFile');
   }
 
   listErpCuentas(fechaDesde: string, fechaHasta: string, soloXPendientes = true): Observable<ErpCxC[]> {

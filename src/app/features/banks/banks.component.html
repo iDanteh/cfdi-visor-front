@@ -27,6 +27,20 @@
           </svg>
           Catálogo auxiliar
         </button>
+
+        <!-- Botón temporal: match de autorizaciones -->
+        <label class="btn-auts" [class.btn-auts-loading]="matchingAuts" title="Cargar Excel de autorizaciones">
+          <input type="file" accept=".xlsx,.xls" style="display:none"
+                 (change)="onAutsFileSelected($event)" [disabled]="matchingAuts">
+          <svg *ngIf="!matchingAuts" width="13" height="13" viewBox="0 0 20 20" fill="none"
+               stroke="currentColor" stroke-width="2.2">
+            <path d="M9 12l2 2 4-4"/><path d="M5 7H3a2 2 0 00-2 2v8a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-2"/>
+            <path d="M13 3H7v8h6V3z"/>
+          </svg>
+          <div *ngIf="matchingAuts" class="spinner spinner-sm"></div>
+          {{ matchingAuts ? 'Procesando…' : 'Autorizaciones' }}
+        </label>
+
         <button class="btn-import-dark" (click)="openImportModal()">
           <svg width="14" height="14" viewBox="0 0 20 20" fill="none"
                stroke="currentColor" stroke-width="2.2">
@@ -35,6 +49,58 @@
           Importar movimientos
         </button>
       </div>
+    </div>
+
+    <!-- Resultado del match de autorizaciones -->
+    <div *ngIf="matchAutsResult" class="auts-result-wrap">
+      <!-- Barra de resumen -->
+      <div class="auts-result-bar">
+        <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="#15803d" stroke-width="2.2">
+          <circle cx="10" cy="10" r="8"/><path d="M7 10l2 2 4-4"/>
+        </svg>
+        <span>
+          <strong>{{ matchAutsResult.identificados }}</strong> nuevos identificados
+          &nbsp;·&nbsp;
+          <strong>{{ matchAutsResult.matcheados }}</strong> matcheados de
+          <strong>{{ matchAutsResult.total }}</strong> autorizaciones
+          &nbsp;·&nbsp;
+          <span class="auts-sin">{{ matchAutsResult.sinMatch }} sin match</span>
+        </span>
+        <button *ngIf="matchAutsResult.sinMatch > 0"
+                class="auts-toggle-btn"
+                (click)="showNoMatcheados = !showNoMatcheados">
+          {{ showNoMatcheados ? 'Ocultar' : 'Ver' }} sin match
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none"
+               stroke="currentColor" stroke-width="2"
+               [style.transform]="showNoMatcheados ? 'rotate(180deg)' : 'rotate(0deg)'"
+               style="transition:transform .15s">
+            <path d="M2 3l3 4 3-4"/>
+          </svg>
+        </button>
+        <button class="auts-close" (click)="matchAutsResult = null; showNoMatcheados = false">✕</button>
+      </div>
+
+      <!-- Lista desplegable de no matcheados -->
+      <div *ngIf="showNoMatcheados && matchAutsResult.noMatcheados.length > 0"
+           class="auts-no-match-list">
+        <div class="auts-no-match-header">
+          <span>Autorización</span>
+          <span>Banco</span>
+          <span class="auts-col-r">Importe</span>
+        </div>
+        <div *ngFor="let r of matchAutsResult.noMatcheados" class="auts-no-match-row">
+          <span class="auts-auth-chip">{{ r.autorizacion }}</span>
+          <span class="auts-banco-txt">{{ r.banco ?? '—' }}</span>
+          <span class="auts-col-r auts-importe">{{ r.importe | currency:'MXN':'symbol':'1.2-2' }}</span>
+        </div>
+      </div>
+    </div>
+    <div *ngIf="matchAutsError" class="auts-result-bar auts-result-err">
+      <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="#b91c1c" stroke-width="2.2">
+        <circle cx="10" cy="10" r="8"/><path d="M10 6v4M10 14h.01"/>
+      </svg>
+      {{ matchAutsError }}
+      <button class="auts-close" (click)="matchAutsError = null">✕</button>
     </div>
 
     <!-- Loading -->
@@ -505,10 +571,13 @@
               <th class="th-right">Saldo ERP</th>
               <th class="th-right">Diferencia</th>
               <th class="th-right">Autorización</th>
+              <th>Identificado por</th>
             </tr>
           </thead>
           <tbody>
-            <tr *ngFor="let m of movements" [class.row-locked]="m.saldoErp !== null && m.saldoErp !== undefined && Math.abs((m.deposito ?? m.retiro ?? 0) - m.saldoErp) <= 1.0">
+            <tr *ngFor="let m of movements"
+                [class.row-locked]="m.saldoErp !== null && m.saldoErp !== undefined && Math.abs((m.deposito ?? m.retiro ?? 0) - m.saldoErp) <= 1.0"
+                [class.row-locked-user]="isLockedByOther(m)">
 
               <td class="td-id">
                 <span *ngIf="m.folio" class="folio-chip">{{ m.folio }}</span>
@@ -545,18 +614,37 @@
               </td>
 
               <td>
-                <button class="status-pill" [ngClass]="statusClass(m.status)"
-                        [class.pill-locked]="m.saldoErp !== null && m.saldoErp !== undefined && (Math.abs((m.deposito ?? m.retiro ?? 0) - m.saldoErp) <= 1.0)"
-                        (click)="cycleStatus(m)"
-                        [title]="(m.saldoErp !== null && m.saldoErp !== undefined && Math.abs((m.deposito ?? m.retiro ?? 0) - m.saldoErp) <= 1.0) ? 'Bloqueado: cuadra con ERP' : 'Click para cambiar estado'">
-                  <svg *ngIf="m.saldoErp !== null && m.saldoErp !== undefined && Math.abs((m.deposito ?? m.retiro ?? 0) - m.saldoErp) <= 1.0"
-                       width="8" height="8" viewBox="0 0 20 20" fill="none"
-                       stroke="currentColor" stroke-width="2.5" style="flex-shrink:0">
-                    <rect x="5" y="9" width="10" height="9" rx="2"/>
-                    <path d="M7 9V6a3 3 0 016 0v3"/>
-                  </svg>
-                  {{ statusLabel(m.status) }}
-                </button>
+                <ng-container *ngIf="m.saldoErp !== null && m.saldoErp !== undefined && (Math.abs((m.deposito ?? m.retiro ?? 0) - m.saldoErp) <= 1.0); else erpUnlocked">
+                  <button class="status-pill pill-locked" [ngClass]="statusClass(m.status)"
+                          title="Bloqueado: cuadra con ERP">
+                    <svg width="8" height="8" viewBox="0 0 20 20" fill="none"
+                         stroke="currentColor" stroke-width="2.5" style="flex-shrink:0">
+                      <rect x="5" y="9" width="10" height="9" rx="2"/>
+                      <path d="M7 9V6a3 3 0 016 0v3"/>
+                    </svg>
+                    {{ statusLabel(m.status) }}
+                  </button>
+                </ng-container>
+                <ng-template #erpUnlocked>
+                  <ng-container *ngIf="isLockedByOther(m); else freePill">
+                    <button class="status-pill pill-locked-user" [ngClass]="statusClass(m.status)"
+                            [title]="'Bloqueado: identificado por ' + m.identificadoPor!.nombre">
+                      <svg width="8" height="8" viewBox="0 0 20 20" fill="none"
+                           stroke="currentColor" stroke-width="2.5" style="flex-shrink:0">
+                        <circle cx="10" cy="7" r="3"/>
+                        <path d="M4 18c0-3.314 2.686-6 6-6s6 2.686 6 6"/>
+                      </svg>
+                      {{ statusLabel(m.status) }}
+                    </button>
+                  </ng-container>
+                  <ng-template #freePill>
+                    <button class="status-pill" [ngClass]="statusClass(m.status)"
+                            (click)="cycleStatus(m)"
+                            title="Click para cambiar estado">
+                      {{ statusLabel(m.status) }}
+                    </button>
+                  </ng-template>
+                </ng-template>
               </td>
 
               <!-- IDs ERP -->
@@ -565,10 +653,18 @@
                   <ng-container *ngFor="let eid of (m.erpIds || [])">
                     <span class="erp-chip" [title]="eid">
                       {{ eid.length > 9 ? (eid | slice:0:9) + '…' : eid }}
-                      <button class="erp-chip-rm" (click)="removeErpId(m, eid, $event)" title="Quitar">×</button>
+                      <button class="erp-chip-rm"
+                              [disabled]="isLockedByOther(m)"
+                              [style.cursor]="isLockedByOther(m) ? 'not-allowed' : ''"
+                              (click)="removeErpId(m, eid, $event)" title="Quitar">×</button>
                     </span>
                   </ng-container>
-                  <button class="btn-erp-add" (click)="openErpModal(m, $event)" title="Asociar CxC del ERP">
+                  <button class="btn-erp-add"
+                          [disabled]="isLockedByOther(m)"
+                          [style.cursor]="isLockedByOther(m) ? 'not-allowed' : ''"
+                          [style.opacity]="isLockedByOther(m) ? '0.4' : ''"
+                          (click)="openErpModal(m, $event)"
+                          [title]="isLockedByOther(m) ? 'Bloqueado: identificado por ' + m.identificadoPor!.nombre : 'Asociar CxC del ERP'">
                     <svg width="10" height="10" viewBox="0 0 20 20" fill="none"
                          stroke="currentColor" stroke-width="2.8">
                       <path d="M10 4v12M4 10h12"/>
@@ -601,10 +697,17 @@
 
               <td class="td-right td-auth">{{ m.numeroAutorizacion || '—' }}</td>
 
+              <td class="td-identificado-por">
+                <span *ngIf="m.identificadoPor?.nombre" class="id-por-chip">
+                  {{ m.identificadoPor!.nombre }}
+                </span>
+                <span *ngIf="!m.identificadoPor?.nombre" class="td-dash">—</span>
+              </td>
+
             </tr>
 
             <tr *ngIf="movements.length === 0">
-              <td colspan="11">
+              <td colspan="12">
                 <div class="empty-state">
                   <div class="empty-icon">🔍</div>
                   <div class="empty-title">Sin resultados</div>
@@ -813,7 +916,7 @@
               </td>
               <td class="mov-concepto-cell">
                 <span class="mov-concepto" [title]="m.concepto">
-                  {{ m.concepto | slice:0:70 }}{{ (m.concepto?.length ?? 0) > 70 ? '…' : '' }}
+                  {{ m.concepto | slice:0:70 }}{{ (m.concepto.length ?? 0) > 70 ? '…' : '' }}
                 </span>
                 <span *ngIf="m.folio" class="mov-folio">{{ m.folio }}</span>
               </td>
@@ -1609,7 +1712,8 @@
 }
 .mov-table tbody tr:last-child { border-bottom: none; }
 .mov-table tbody tr:hover { background: #fafafa; }
-.mov-table tbody tr.row-locked { background: #fcfcfc; }
+.mov-table tbody tr.row-locked      { background: #fcfcfc; }
+.mov-table tbody tr.row-locked-user { background: #fdf4ff; }
 .mov-table td { padding: .7rem 1rem; color: #374151; vertical-align: middle; }
 
 .th-id      { width: 110px; white-space: nowrap; }
@@ -1617,6 +1721,8 @@
 .td-date    { white-space: nowrap; color: #6b7280; font-size: .82rem; }
 .td-right   { text-align: right; white-space: nowrap; }
 .td-auth        { font-family: monospace; font-size: .72rem; color: #9ca3af; width: 80px; max-width: 80px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.td-identificado-por { white-space: nowrap; }
+.id-por-chip    { display: inline-flex; align-items: center; gap: .3rem; padding: .18rem .55rem; border-radius: 999px; background: #ecfdf5; color: #065f46; font-size: .72rem; font-weight: 500; border: 1px solid #a7f3d0; }
 .td-saldo-erp   { white-space: nowrap; font-size: .78rem; }
 .saldo-erp-val  { color: #374151; font-weight: 600; }
 .td-diferencia  { white-space: nowrap; font-size: .78rem; }
@@ -1660,8 +1766,9 @@
   border-radius: 999px; border: none; cursor: pointer;
   transition: filter .15s; white-space: nowrap;
 }
-.status-pill:hover:not(.pill-locked) { filter: brightness(.92); }
-.pill-locked { cursor: default; }
+.status-pill:hover:not(.pill-locked):not(.pill-locked-user) { filter: brightness(.92); }
+.pill-locked      { cursor: default; }
+.pill-locked-user { cursor: not-allowed; opacity: .85; }
 .st-pending { background: #fef9c3; color: #92400e; }
 .st-done    { background: #dcfce7; color: #15803d; }
 .st-other   { background: #f1f5f9; color: #475569; }
@@ -2221,4 +2328,70 @@
 .cat-filter-empty {
   padding: .75rem .85rem; font-size: .8rem; color: #9ca3af; text-align: center;
 }
+
+/* ══ BOTÓN AUTORIZACIONES (temporal) ════════════════════════════════════════ */
+.btn-auts {
+  display: inline-flex; align-items: center; gap: .4rem;
+  background: #f0fdf4; color: #15803d;
+  border: 1.5px solid #86efac; border-radius: 8px;
+  padding: .48rem .9rem; font-size: .84rem; font-weight: 600;
+  cursor: pointer; transition: all .15s; white-space: nowrap; user-select: none;
+}
+.btn-auts:hover { background: #dcfce7; border-color: #4ade80; }
+.btn-auts-loading { opacity: .7; cursor: not-allowed; }
+
+.auts-result-bar {
+  display: flex; align-items: center; gap: .65rem;
+  padding: .65rem 1.25rem; border-radius: 10px; margin: 0 0 .75rem 0;
+  background: #f0fdf4; border: 1px solid #bbf7d0;
+  font-size: .875rem; color: #15803d;
+}
+.auts-result-err { background: #fef2f2; border-color: #fecaca; color: #b91c1c; }
+.auts-sin  { color: #6b7280; }
+.auts-toggle-btn {
+  display: inline-flex; align-items: center; gap: .3rem;
+  background: none; border: 1px solid #86efac; border-radius: 6px;
+  color: #15803d; font-size: .78rem; font-weight: 600;
+  padding: .2rem .55rem; cursor: pointer; white-space: nowrap;
+  transition: background .12s;
+}
+.auts-toggle-btn:hover { background: #dcfce7; }
+.auts-close {
+  margin-left: auto; background: none; border: none; cursor: pointer;
+  color: inherit; opacity: .5; font-size: .9rem; padding: 0 .25rem;
+  transition: opacity .1s;
+}
+.auts-close:hover { opacity: 1; }
+
+.auts-result-wrap { display: flex; flex-direction: column; margin-bottom: .75rem; }
+.auts-result-wrap .auts-result-bar { margin-bottom: 0; border-radius: 10px 10px 0 0; }
+
+.auts-no-match-list {
+  border: 1px solid #fecaca; border-top: none;
+  border-radius: 0 0 10px 10px;
+  background: #fff; overflow: hidden;
+  max-height: 260px; overflow-y: auto;
+}
+.auts-no-match-header {
+  display: grid; grid-template-columns: 1fr 1fr 1fr;
+  padding: .4rem .85rem; background: #fef2f2;
+  font-size: .7rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .05em; color: #b91c1c;
+  position: sticky; top: 0;
+}
+.auts-no-match-row {
+  display: grid; grid-template-columns: 1fr 1fr 1fr;
+  padding: .45rem .85rem; font-size: .8rem; color: #374151;
+  border-top: 1px solid #fff1f2;
+  align-items: center;
+}
+.auts-no-match-row:hover { background: #fff5f5; }
+.auts-auth-chip {
+  font-family: monospace; font-size: .78rem; font-weight: 600;
+  background: #fee2e2; color: #b91c1c;
+  padding: .15rem .45rem; border-radius: 4px; width: fit-content;
+}
+.auts-banco-txt { color: #6b7280; font-size: .8rem; }
+.auts-col-r     { text-align: right; }
+.auts-importe   { font-weight: 600; color: #374151; }
 </style>

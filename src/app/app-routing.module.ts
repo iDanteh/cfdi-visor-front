@@ -1,8 +1,13 @@
-import { NgModule } from '@angular/core';
+import { NgModule }     from '@angular/core';
 import { RouterModule, Routes } from '@angular/router';
-import { AuthGuard } from './core/guards/auth.guard';
+import { AuthGuard }    from './core/guards/auth.guard';
+import { LoginComponent } from './features/login/login.component';
 
 const routes: Routes = [
+  // Ruta pública — vista de login
+  { path: 'login', component: LoginComponent },
+
+  // Rutas protegidas
   { path: '', redirectTo: '/banks', pathMatch: 'full' },
   {
     path: 'banks',
@@ -23,7 +28,7 @@ const routes: Routes = [
 ];
 
 @NgModule({
-  imports: [RouterModule.forRoot(routes)],
+  imports: [RouterModule.forRoot(routes, { useHash: true })],
   exports: [RouterModule],
 })
 export class AppRoutingModule {}

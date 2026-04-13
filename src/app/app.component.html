@@ -1,65 +1,115 @@
-<ng-container *ngIf="auth.isAuthenticated; else noLayout">
-  <div class="app-layout">
-
-    <nav class="sidebar" [class.sidebar-collapsed]="sidebarCollapsed">
-
-      <!-- Brand + toggle -->
-      <div class="sidebar-brand">
-        <div *ngIf="!sidebarCollapsed" class="sidebar-brand-name">CFDI Comparator</div>
-        <div *ngIf="!sidebarCollapsed" class="sidebar-brand-sub">Sistema contable</div>
-        <button (click)="toggleSidebar()" class="sidebar-toggle" [title]="sidebarCollapsed ? 'Expandir' : 'Colapsar'">
-          {{ sidebarCollapsed ? '›' : '‹' }}
-        </button>
-      </div>
-
-      <!-- Navigation -->
-      <div class="sidebar-nav">
-        <div *ngIf="!sidebarCollapsed" class="sidebar-section">Principal</div>
-        <a routerLink="/banks" routerLinkActive="active" [title]="sidebarCollapsed ? 'Bancos' : ''">
-          <span class="sidebar-icon">₿</span>
-          <span *ngIf="!sidebarCollapsed">Bancos</span>
-        </a>
-        <a routerLink="/collection-requests" routerLinkActive="active" [title]="sidebarCollapsed ? 'Solicitudes de Cobro' : ''">
-          <span class="sidebar-icon">📷</span>
-          <span *ngIf="!sidebarCollapsed">Solicitudes de Cobro</span>
-        </a>
-
-        <div *ngIf="!sidebarCollapsed" class="sidebar-section">Contabilidad</div>
-        <a routerLink="/account-plan" routerLinkActive="active" [title]="sidebarCollapsed ? 'Catálogo de Cuentas' : ''">
-          <span class="sidebar-icon">📒</span>
-          <span *ngIf="!sidebarCollapsed">Catálogo de Cuentas</span>
-        </a>
-
-      </div>
-
-      <!-- Footer -->
-      <div class="sidebar-footer" *ngIf="!sidebarCollapsed">
-        <div class="sidebar-user">
-          <div class="sidebar-avatar">{{ auth.currentUser.name[0].toUpperCase() }}</div>
-          <div>
-            <div class="sidebar-user-name">{{ auth.currentUser.name }}</div>
-            <div class="sidebar-user-role">{{ auth.currentUser.role }}</div>
-          </div>
-        </div>
-        <button (click)="logout()" class="btn btn-ghost btn-sm w-full"
-          style="justify-content:center; color:#94a3b8; border:1px solid rgba(255,255,255,0.08);">
-          Cerrar sesión
-        </button>
-      </div>
-
-      <div class="sidebar-footer" *ngIf="sidebarCollapsed" style="padding:0.75rem 0; display:flex; justify-content:center;">
-        <button (click)="logout()" class="sidebar-toggle" title="Cerrar sesión" style="font-size:1rem;">⏻</button>
-      </div>
-
-    </nav>
-
-    <main class="main-content">
-      <router-outlet></router-outlet>
-    </main>
-
+<!-- Pantalla de carga mientras Auth0 inicializa -->
+<ng-container *ngIf="auth.isLoading; else ready">
+  <div class="app-init-loader">
+    <div class="app-init-spinner"></div>
   </div>
 </ng-container>
 
-<ng-template #noLayout>
-  <router-outlet></router-outlet>
+<ng-template #ready>
+
+  <!-- Layout con sidebar para usuarios autenticados -->
+  <ng-container *ngIf="auth.isAuthenticated; else noLayout">
+    <div class="app-layout">
+
+      <nav class="sidebar" [class.sidebar-collapsed]="sidebarCollapsed">
+
+        <!-- Brand + toggle -->
+        <div class="sidebar-brand">
+          <img src="/Kore-ACC.svg" alt="Kore ACC"
+               [class]="sidebarCollapsed ? 'sidebar-logo-sm' : 'sidebar-logo'">
+          <div *ngIf="!sidebarCollapsed" class="sidebar-brand-text">
+            <div class="sidebar-brand-name">Kore ACC</div>
+            <div class="sidebar-brand-sub">Sistema contable</div>
+          </div>
+          <button (click)="toggleSidebar()" class="sidebar-toggle"
+                  [title]="sidebarCollapsed ? 'Expandir' : 'Colapsar'">
+            {{ sidebarCollapsed ? '›' : '‹' }}
+          </button>
+        </div>
+
+        <!-- Navigation -->
+        <div class="sidebar-nav">
+          <div *ngIf="!sidebarCollapsed" class="sidebar-section">Principal</div>
+          <a routerLink="/banks" routerLinkActive="active"
+             [title]="sidebarCollapsed ? 'Bancos' : ''">
+            <span class="sidebar-icon">₿</span>
+            <span *ngIf="!sidebarCollapsed">Bancos</span>
+          </a>
+          <a routerLink="/collection-requests" routerLinkActive="active"
+             [title]="sidebarCollapsed ? 'Solicitudes de Cobro' : ''">
+            <span class="sidebar-icon">📷</span>
+            <span *ngIf="!sidebarCollapsed">Solicitudes de Cobro</span>
+          </a>
+
+          <div *ngIf="!sidebarCollapsed" class="sidebar-section">Contabilidad</div>
+          <a routerLink="/account-plan" routerLinkActive="active"
+             [title]="sidebarCollapsed ? 'Catálogo de Cuentas' : ''">
+            <span class="sidebar-icon">📒</span>
+            <span *ngIf="!sidebarCollapsed">Catálogo de Cuentas</span>
+          </a>
+        </div>
+
+        <!-- Footer con avatar y logout -->
+        <div class="sidebar-footer" *ngIf="!sidebarCollapsed">
+          <div class="sidebar-user">
+            <ng-container *ngIf="auth.currentUser.picture; else avatarInitial">
+              <img class="sidebar-avatar-img" [src]="auth.currentUser.picture"
+                   [alt]="auth.currentUser.name" referrerpolicy="no-referrer">
+            </ng-container>
+            <ng-template #avatarInitial>
+              <div class="sidebar-avatar">
+                {{ (auth.currentUser.name || 'U')[0].toUpperCase() }}
+              </div>
+            </ng-template>
+            <div>
+              <div class="sidebar-user-name">{{ auth.currentUser.name }}</div>
+              <div class="sidebar-user-role">{{ auth.currentUser.role }}</div>
+            </div>
+          </div>
+          <button (click)="logout()" class="btn btn-ghost btn-sm w-full"
+            style="justify-content:center; color:#94a3b8; border:1px solid rgba(255,255,255,0.08);">
+            Cerrar sesión
+          </button>
+        </div>
+
+        <div class="sidebar-footer" *ngIf="sidebarCollapsed"
+             style="padding:0.75rem 0; display:flex; justify-content:center;">
+          <button (click)="logout()" class="sidebar-toggle"
+                  title="Cerrar sesión" style="font-size:1rem;">⏻</button>
+        </div>
+
+      </nav>
+
+      <main class="main-content">
+        <router-outlet></router-outlet>
+      </main>
+
+    </div>
+  </ng-container>
+
+  <!-- Sin layout: login u otras rutas públicas -->
+  <ng-template #noLayout>
+    <router-outlet></router-outlet>
+  </ng-template>
+
 </ng-template>
+
+<style>
+.app-init-loader {
+  position: fixed; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: #0f172a;
+}
+.app-init-spinner {
+  width: 36px; height: 36px;
+  border: 3px solid rgba(99,102,241,.2);
+  border-top-color: #6366f1;
+  border-radius: 50%;
+  animation: spin .75s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.sidebar-avatar-img {
+  width: 34px; height: 34px; border-radius: 50%; object-fit: cover;
+  flex-shrink: 0;
+}
+</style>
