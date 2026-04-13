@@ -1,17 +1,9 @@
-import { Injectable } from '@angular/core';
-import { HttpRequest, HttpHandler, HttpEvent, HttpInterceptor } from '@angular/common/http';
-import { Observable } from 'rxjs';
-
 /**
- * AuthInterceptor — STUB para desarrollo.
+ * auth.interceptor.ts — reemplazado por AuthHttpInterceptor de @auth0/auth0-angular.
  *
- * No adjunta token (backend usa auth.stub que no requiere uno).
- * Para restaurar autenticación real, leer el token de AuthService
- * y adjuntarlo como 'Authorization: Bearer <token>'.
+ * El adjuntado automático del Access Token a las peticiones hacia /api/*
+ * lo realiza AuthHttpInterceptor, registrado en AppModule junto con la
+ * configuración httpInterceptor.allowedList de AuthModule.forRoot().
+ *
+ * Este archivo se conserva para no romper referencias pero no está registrado.
  */
-@Injectable()
-export class AuthInterceptor implements HttpInterceptor {
-  intercept(req: HttpRequest<unknown>, next: HttpHandler): Observable<HttpEvent<unknown>> {
-    return next.handle(req); // STUB: pasa sin modificar
-  }
-}

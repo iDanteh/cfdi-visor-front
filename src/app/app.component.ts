@@ -3,7 +3,7 @@ import { AuthService } from './core/services/auth.service';
 
 @Component({
   standalone: false,
-  selector: 'app-root',
+  selector:   'app-root',
   templateUrl: './app.component.html',
 })
 export class AppComponent {

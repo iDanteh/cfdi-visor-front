@@ -6,6 +6,7 @@ import {
   BankService, BankMovement, BankCard, BankFilter, BankStatus, ErpCxC, ErpLink,
   AuxClienteSummary, AuxApplyResult, BankRule, BankRuleCondicion, RuleCampo, RuleOperador,
 } from '../../core/services/bank.service';
+import { AuthService } from '../../core/services/auth.service';
 
 type ViewMode  = 'cards' | 'detail' | 'auxiliar';
 type SortDir   = 'asc' | 'desc';
@@ -72,6 +73,44 @@ export class BanksComponent implements OnInit, OnDestroy {
   isDragging      = false;
   uploadResult:   { importados: number; duplicados: number; resumen: Record<string, number> } | null = null;
   uploadError:    string | null = null;
+
+  // ── Match de autorizaciones ─────────────────────────────────────────────────
+  matchingAuts       = false;
+  matchAutsResult: {
+    total: number; matcheados: number; identificados: number; sinMatch: number;
+    noMatcheados: { autorizacion: string; importe: number; banco: string | null }[];
+  } | null = null;
+  showNoMatcheados = false;
+  matchAutsError:  string | null = null;
+
+  // ── Match de autorizaciones ─────────────────────────────────────────────────
+
+  onAutsFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file  = input.files?.[0];
+    if (!file) return;
+    input.value = '';
+    this.runMatchAutorizaciones(file);
+  }
+
+  private runMatchAutorizaciones(file: File): void {
+    this.matchingAuts    = true;
+    this.matchAutsResult = null;
+    this.matchAutsError  = null;
+    this.showNoMatcheados = false;
+
+    this.bankService.matchAutorizaciones(file).subscribe({
+      next: (res) => {
+        this.matchAutsResult = res;
+        this.matchingAuts    = false;
+        this.loadCards();
+      },
+      error: (err) => {
+        this.matchAutsError = err?.error?.error || 'Error al procesar el archivo';
+        this.matchingAuts   = false;
+      },
+    });
+  }
 
   // ── Modal de cuenta contable ────────────────────────────────────────────────
   showCuentaModal  = false;
@@ -190,7 +229,7 @@ export class BanksComponent implements OnInit, OnDestroy {
   private loadTrigger$   = new Subject<BankFilter>();
   private conceptoFilter$ = new Subject<string>();
 
-  constructor(private bankService: BankService, private fb: FormBuilder) {
+  constructor(private bankService: BankService, private fb: FormBuilder, public auth: AuthService) {
     this.filterForm = this.fb.group({
       search:      [''],
       tipo:        [''],
@@ -631,6 +670,7 @@ export class BanksComponent implements OnInit, OnDestroy {
 
   openErpModal(mov: BankMovement, event: Event): void {
     event.stopPropagation();
+    if (this.isLockedByOther(mov)) return;
     this.erpModalMovement  = mov;
     this.erpIdsOriginal    = [...(mov.erpIds ?? [])];
     this.erpSearch         = '';
@@ -680,11 +720,12 @@ export class BanksComponent implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (res) => {
-          mov.erpIds   = res.erpIds;
-          mov.erpLinks = res.erpLinks;
-          mov.saldoErp = res.saldoErp;
-          mov.uuidXML  = res.uuidXML;
-          mov.status   = res.status;
+          mov.erpIds          = res.erpIds;
+          mov.erpLinks        = res.erpLinks;
+          mov.saldoErp        = res.saldoErp;
+          mov.uuidXML         = res.uuidXML;
+          mov.status          = res.status;
+          mov.identificadoPor = res.identificadoPor ?? null;
           this.erpIdsOriginal   = [...res.erpIds];
           this.erpSaving        = false;
           this.showErpModal     = false;
@@ -732,13 +773,15 @@ export class BanksComponent implements OnInit, OnDestroy {
 
   removeErpId(mov: BankMovement, erpId: string, event: Event): void {
     event.stopPropagation();
+    if (this.isLockedByOther(mov)) return;
     this.bankService.removeErpId(mov._id, erpId).pipe(takeUntil(this.destroy$)).subscribe({
       next: (res) => {
-        mov.erpIds   = res.erpIds;
-        mov.erpLinks = res.erpLinks;
-        mov.saldoErp = res.saldoErp;
-        mov.uuidXML  = res.uuidXML;
-        mov.status   = res.status;
+        mov.erpIds          = res.erpIds;
+        mov.erpLinks        = res.erpLinks;
+        mov.saldoErp        = res.saldoErp;
+        mov.uuidXML         = res.uuidXML;
+        mov.status          = res.status;
+        mov.identificadoPor = res.identificadoPor ?? null;
         this.loadCards();
       },
     });
@@ -753,13 +796,26 @@ export class BanksComponent implements OnInit, OnDestroy {
 
   // ── Status inline ───────────────────────────────────────────────────────────
 
+  isLockedByOther(mov: BankMovement): boolean {
+    return (
+      mov.status === 'identificado' &&
+      !!mov.identificadoPor?.userId &&
+      mov.identificadoPor.userId !== this.auth.currentUser.id
+    );
+  }
+
   cycleStatus(mov: BankMovement): void {
     const bankAmount = mov.deposito ?? mov.retiro ?? 0;
     if (mov.saldoErp !== null && mov.saldoErp !== undefined && Math.abs(bankAmount - mov.saldoErp) <= 1.0) return;
+    if (this.isLockedByOther(mov)) return;
     const order: BankStatus[] = ['no_identificado', 'identificado', 'otros'];
     const next = order[(order.indexOf(mov.status) + 1) % order.length];
     this.bankService.updateStatus(mov._id, next).pipe(takeUntil(this.destroy$)).subscribe({
-      next: (res) => { mov.status = res.status; this.loadCards(); },
+      next: (res) => {
+        mov.status          = res.status;
+        mov.identificadoPor = res.identificadoPor ?? null;
+        this.loadCards();
+      },
     });
   }
 
