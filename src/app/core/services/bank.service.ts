@@ -234,4 +234,12 @@ export class BankService {
     return this.api.get('/erp/cuentas-pendientes', params);
   }
 
+  matchErp(): Observable<{ matched: number; message: string }> {
+    return this.api.post('/erp/match', {});
+  }
+
+  revertMatchErp(): Observable<{ reverted: number; message: string }> {
+    return this.api.post('/erp/match/revert', {});
+  }
+
 }

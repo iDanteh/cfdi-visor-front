@@ -3,6 +3,7 @@ import { HttpClient }                        from '@angular/common/http';
 import { AuthService as Auth0Service, User } from '@auth0/auth0-angular';
 import { BehaviorSubject, Observable }       from 'rxjs';
 import { environment }                       from '../../../environments/environment';
+import { SocketService }                     from './socket.service';
 
 const NOMBRE_CLAIM = 'https://cfdi-comparator/nombre';
 
@@ -36,7 +37,11 @@ export class AuthService {
   readonly isLoading$:       Observable<boolean>;
   readonly roleLoaded$:      Observable<boolean> = this._roleLoaded.asObservable();
 
-  constructor(private auth0: Auth0Service, private http: HttpClient) {
+  constructor(
+    private auth0:  Auth0Service,
+    private http:   HttpClient,
+    private socket: SocketService,
+  ) {
     this.isAuthenticated$ = this.auth0.isAuthenticated$;
     this.isLoading$       = this.auth0.isLoading$;
 
@@ -76,11 +81,22 @@ export class AuthService {
           name:  data.nombre || this._user.name,
         };
         this._roleLoaded.next(true);
+        this.initSocket();
       },
       error: () => {
         // Si falla la carga del rol, no bloquear la app — queda como viewer
         this._roleLoaded.next(true);
       },
+    });
+  }
+
+  private initSocket(): void {
+    this.socket.connect();
+    if (this._user.id) {
+      this.socket.identify(this._user.id);
+    }
+    this.socket.roleUpdated$.subscribe(({ role }) => {
+      this._user = { ...this._user, role };
     });
   }
 

@@ -4,11 +4,11 @@ import { merge, Subject } from 'rxjs';
 import { debounceTime, distinctUntilChanged, switchMap, takeUntil } from 'rxjs/operators';
 import {
   BankService, BankMovement, BankCard, BankFilter, BankStatus, ErpCxC, ErpLink,
-  AuxClienteSummary, AuxApplyResult, BankRule, BankRuleCondicion, RuleCampo, RuleOperador,
+  BankRule, BankRuleCondicion, RuleCampo, RuleOperador,
 } from '../../core/services/bank.service';
 import { AuthService } from '../../core/services/auth.service';
 
-type ViewMode  = 'cards' | 'detail' | 'auxiliar';
+type ViewMode  = 'cards' | 'detail';
 type SortDir   = 'asc' | 'desc';
 type SortField = 'fecha' | 'banco' | 'deposito' | 'retiro';
 
@@ -46,23 +46,6 @@ export class BanksComponent implements OnInit, OnDestroy {
   sortField: SortField = 'fecha';
   sortDir:   SortDir   = 'desc';
 
-  // ── Vista identificados por auxiliar ────────────────────────────────────────
-  auxClientes:         AuxClienteSummary[] = [];
-  auxClientesLoading   = false;
-  activeAuxCliente:    string | null = null;
-  auxMovements:        BankMovement[] = [];
-  auxMovPagination     = { total: 0, page: 1, limit: 50, pages: 0 };
-  auxMovLoading        = false;
-  applyingAux          = false;
-  applyAuxResult:      AuxApplyResult | null = null;
-  applyAuxError:       string | null = null;
-
-  // ── Modal auxiliar de cuentas ───────────────────────────────────────────────
-  showAuxModal       = false;
-  auxFile: File | null = null;
-  auxIsDragging      = false;
-  auxUploading       = false;
-  auxResult: { importados: number; actualizados: number; omitidos: number; errores: string[]; total: number } | null = null;
   auxError: string | null = null;
 
   // ── Modal de importación ────────────────────────────────────────────────────
@@ -73,6 +56,49 @@ export class BanksComponent implements OnInit, OnDestroy {
   isDragging      = false;
   uploadResult:   { importados: number; duplicados: number; resumen: Record<string, number> } | null = null;
   uploadError:    string | null = null;
+
+  // ── Match ERP ───────────────────────────────────────────────────────────────
+  matchingErp        = false;
+  revertingErp       = false;
+  matchErpResult:    { matched: number; message: string } | null = null;
+  revertErpResult:   { reverted: number; message: string } | null = null;
+  matchErpError:     string | null = null;
+
+  runMatchErp(): void {
+    this.matchingErp    = true;
+    this.matchErpResult = null;
+    this.revertErpResult = null;
+    this.matchErpError  = null;
+    this.bankService.matchErp().subscribe({
+      next: (res) => {
+        this.matchErpResult = res;
+        this.matchingErp    = false;
+        if (res.matched > 0) this.loadCards();
+      },
+      error: (err) => {
+        this.matchErpError = err?.error?.error || 'Error al ejecutar el motor ERP';
+        this.matchingErp   = false;
+      },
+    });
+  }
+
+  runRevertMatchErp(): void {
+    this.revertingErp    = true;
+    this.matchErpResult  = null;
+    this.revertErpResult = null;
+    this.matchErpError   = null;
+    this.bankService.revertMatchErp().subscribe({
+      next: (res) => {
+        this.revertErpResult = res;
+        this.revertingErp    = false;
+        if (res.reverted > 0) this.loadCards();
+      },
+      error: (err) => {
+        this.matchErpError = err?.error?.error || 'Error al revertir asociaciones ERP';
+        this.revertingErp  = false;
+      },
+    });
+  }
 
   // ── Match de autorizaciones ─────────────────────────────────────────────────
   matchingAuts       = false;
@@ -446,132 +472,6 @@ export class BanksComponent implements OnInit, OnDestroy {
     return 'dot-gray';
   }
 
-  // ── Vista identificados por auxiliar ────────────────────────────────────────
-
-  openAuxView(): void {
-    this.view              = 'auxiliar';
-    this.activeAuxCliente  = null;
-    this.auxMovements      = [];
-    this.applyAuxResult    = null;
-    this.applyAuxError     = null;
-    this.loadAuxClientes();
-  }
-
-  goBackFromAux(): void {
-    if (this.activeAuxCliente !== null) {
-      this.activeAuxCliente = null;
-      this.auxMovements     = [];
-    } else {
-      this.view = 'cards';
-    }
-  }
-
-  loadAuxClientes(): void {
-    this.auxClientesLoading = true;
-    this.bankService.listAuxClientes().pipe(takeUntil(this.destroy$)).subscribe({
-      next: (list) => { this.auxClientes = list; this.auxClientesLoading = false; },
-      error: ()    => { this.auxClientesLoading = false; },
-    });
-  }
-
-  openAuxCliente(nombre: string): void {
-    this.activeAuxCliente = nombre;
-    this.auxMovLoading    = true;
-    this.auxMovements     = [];
-    this.loadAuxMovimientos(1);
-  }
-
-  loadAuxMovimientos(page = 1): void {
-    this.auxMovLoading = true;
-    this.bankService.listAuxMovimientos({
-      auxNombre: this.activeAuxCliente ?? undefined,
-      page,
-      limit: this.auxMovPagination.limit,
-    }).pipe(takeUntil(this.destroy$)).subscribe({
-      next: (res) => {
-        this.auxMovements    = res.data;
-        this.auxMovPagination = res.pagination;
-        this.auxMovLoading   = false;
-      },
-      error: () => { this.auxMovLoading = false; },
-    });
-  }
-
-  aplicarAuxiliar(): void {
-    if (this.applyingAux) return;
-    this.applyingAux   = true;
-    this.applyAuxResult = null;
-    this.applyAuxError  = null;
-    this.bankService.aplicarAuxiliar().pipe(takeUntil(this.destroy$)).subscribe({
-      next: (res) => {
-        this.applyAuxResult = res;
-        this.applyingAux    = false;
-        this.loadAuxClientes();
-      },
-      error: (err) => {
-        this.applyAuxError = err?.error?.error || 'Error al aplicar el catálogo';
-        this.applyingAux   = false;
-      },
-    });
-  }
-
-  get activeAuxClienteData(): AuxClienteSummary | null {
-    if (!this.activeAuxCliente) return null;
-    return this.auxClientes.find(c => c._id === this.activeAuxCliente) ?? null;
-  }
-
-  // ── Modal auxiliar de cuentas ───────────────────────────────────────────────
-
-  openAuxModal(): void {
-    this.auxFile      = null;
-    this.auxResult    = null;
-    this.auxError     = null;
-    this.auxIsDragging = false;
-    this.showAuxModal = true;
-  }
-
-  closeAuxModal(): void {
-    this.showAuxModal = false;
-  }
-
-  onAuxFileSelected(event: Event): void {
-    const input = event.target as HTMLInputElement;
-    this.setAuxFile(input.files?.[0] ?? null);
-  }
-
-  onAuxDrop(event: DragEvent): void {
-    event.preventDefault();
-    this.auxIsDragging = false;
-    const file = event.dataTransfer?.files[0];
-    if (file && /\.(xlsx|xls)$/i.test(file.name)) this.setAuxFile(file);
-  }
-
-  onAuxDragOver(event: DragEvent): void { event.preventDefault(); this.auxIsDragging = true; }
-  onAuxDragLeave(): void { this.auxIsDragging = false; }
-
-  private setAuxFile(file: File | null): void {
-    this.auxFile   = file;
-    this.auxResult = null;
-    this.auxError  = null;
-  }
-
-  uploadAuxiliar(): void {
-    if (!this.auxFile || this.auxUploading) return;
-    this.auxUploading = true;
-    this.auxError     = null;
-
-    this.bankService.importAuxiliar(this.auxFile).pipe(takeUntil(this.destroy$)).subscribe({
-      next: (res) => {
-        this.auxResult    = res;
-        this.auxUploading = false;
-        this.auxFile      = null;
-      },
-      error: (err) => {
-        this.auxError     = err?.error?.error || 'Error al procesar el archivo';
-        this.auxUploading = false;
-      },
-    });
-  }
 
   // ── Modal de importación ────────────────────────────────────────────────────
 
@@ -797,6 +697,7 @@ export class BanksComponent implements OnInit, OnDestroy {
   // ── Status inline ───────────────────────────────────────────────────────────
 
   isLockedByOther(mov: BankMovement): boolean {
+    if (this.auth.hasRole('admin')) return false;
     return (
       mov.status === 'identificado' &&
       !!mov.identificadoPor?.userId &&
@@ -806,7 +707,7 @@ export class BanksComponent implements OnInit, OnDestroy {
 
   cycleStatus(mov: BankMovement): void {
     const bankAmount = mov.deposito ?? mov.retiro ?? 0;
-    if (mov.saldoErp !== null && mov.saldoErp !== undefined && Math.abs(bankAmount - mov.saldoErp) <= 1.0) return;
+    if (!this.auth.hasRole('admin') && mov.saldoErp !== null && mov.saldoErp !== undefined && Math.abs(bankAmount - mov.saldoErp) <= 1.0) return;
     if (this.isLockedByOther(mov)) return;
     const order: BankStatus[] = ['no_identificado', 'identificado', 'otros'];
     const next = order[(order.indexOf(mov.status) + 1) % order.length];
