@@ -628,7 +628,7 @@
                 <ng-template #erpUnlocked>
                   <ng-container *ngIf="isLockedByOther(m); else freePill">
                     <button class="status-pill pill-locked-user" [ngClass]="statusClass(m.status)"
-                            [title]="'Bloqueado: identificado por ' + m.identificadoPor!.nombre">
+                            [title]="'Bloqueado: identificado por ' + identificadoPorLabel(m)">
                       <svg width="8" height="8" viewBox="0 0 20 20" fill="none"
                            stroke="currentColor" stroke-width="2.5" style="flex-shrink:0">
                         <circle cx="10" cy="7" r="3"/>
@@ -698,10 +698,10 @@
               <td class="td-right td-auth">{{ m.numeroAutorizacion || '—' }}</td>
 
               <td class="td-identificado-por">
-                <span *ngIf="m.identificadoPor?.nombre" class="id-por-chip">
-                  {{ m.identificadoPor!.nombre }}
+                <span *ngIf="m.identificadoPor?.userId" class="id-por-chip">
+                  {{ identificadoPorLabel(m) }}
                 </span>
-                <span *ngIf="!m.identificadoPor?.nombre" class="td-dash">—</span>
+                <span *ngIf="!m.identificadoPor?.userId" class="td-dash">—</span>
               </td>
 
             </tr>

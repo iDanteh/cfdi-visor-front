@@ -819,6 +819,14 @@ export class BanksComponent implements OnInit, OnDestroy {
     });
   }
 
+  identificadoPorLabel(mov: BankMovement): string {
+    const ip = mov.identificadoPor;
+    if (!ip?.userId) return '—';
+    if (ip.nombre)   return ip.nombre;
+    // Fallback: usa la parte del sub después de '|' (ej: auth0|abc123 → abc123)
+    return ip.userId.includes('|') ? ip.userId.split('|')[1] : ip.userId;
+  }
+
   statusLabel(s: BankStatus | string): string {
     const m: Record<string, string> = {
       no_identificado: 'No identificado',

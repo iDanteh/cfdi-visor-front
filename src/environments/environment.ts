@@ -3,8 +3,8 @@ export const environment = {
   apiUrl:     'http://localhost:3000/api',
   appUrl:     'http://localhost:4200',
   auth0: {
-    domain:   'dev-1sol0n0owkx7ho82.us.auth0.com',
-    clientId: 'XoLnuu4j2eDWa7XCNn5D2Oe84IRvFZ8y',
-    audience: 'koreacc',
+    domain:   'dev-hrqcugo7q13wcwz0.us.auth0.com',
+    clientId: 'H6rMJfuI1Vr6fNmPYRm1JXysuut7voZ5',
+    audience: 'https://dev-hrqcugo7q13wcwz0.us.auth0.com/api/v2/',
   },
 };

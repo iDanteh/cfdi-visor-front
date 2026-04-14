@@ -47,6 +47,15 @@
             <span class="sidebar-icon">📒</span>
             <span *ngIf="!sidebarCollapsed">Catálogo de Cuentas</span>
           </a>
+
+          <ng-container *ngIf="auth.hasRole('admin')">
+            <div *ngIf="!sidebarCollapsed" class="sidebar-section">Administración</div>
+            <a routerLink="/users" routerLinkActive="active"
+               [title]="sidebarCollapsed ? 'Usuarios y Roles' : ''">
+              <span class="sidebar-icon">👥</span>
+              <span *ngIf="!sidebarCollapsed">Usuarios y Roles</span>
+            </a>
+          </ng-container>
         </div>
 
         <!-- Footer con avatar y logout -->

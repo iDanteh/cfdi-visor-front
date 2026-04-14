@@ -8,16 +8,17 @@ import { AuthService }               from '../services/auth.service';
 /**
  * RoleGuard — restringe rutas a roles específicos.
  *
+ * Espera a que AuthService cargue el rol real desde la DB antes de decidir.
+ *
  * Uso en routes:
  *   {
- *     path: 'admin',
+ *     path: 'users',
  *     canActivate: [AuthGuard, RoleGuard],
  *     data: { roles: ['admin'] },
  *     ...
  *   }
  *
  * Si el usuario no tiene el rol requerido se redirige a /banks.
- * Debe usarse SIEMPRE junto a AuthGuard (que garantiza que hay sesión activa).
  */
 @Injectable({ providedIn: 'root' })
 export class RoleGuard implements CanActivate {
@@ -30,17 +31,18 @@ export class RoleGuard implements CanActivate {
     return this.auth.isLoading$.pipe(
       filter(loading => !loading),
       take(1),
-      switchMap(() => this.auth.isAuthenticated$),
+      switchMap(() => this.auth.roleLoaded$),
+      filter(loaded => loaded),
       take(1),
-      map((authenticated: boolean) => {
-        if (!authenticated) {
+      map(() => {
+        if (!this.auth.isAuthenticated) {
           this.router.navigate(['/login']);
           return false;
         }
         if (required.length === 0 || this.auth.hasRole(...required)) {
           return true;
         }
-        this.router.navigate(['/banks']); // sin permiso → vista principal
+        this.router.navigate(['/banks']);
         return false;
       }),
     );
