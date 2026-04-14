@@ -1,8 +1,10 @@
 import { Injectable }                       from '@angular/core';
+import { HttpClient }                        from '@angular/common/http';
 import { AuthService as Auth0Service, User } from '@auth0/auth0-angular';
-import { Observable }                        from 'rxjs';
+import { BehaviorSubject, Observable }       from 'rxjs';
+import { environment }                       from '../../../environments/environment';
 
-const ROLE_CLAIM = 'https://cfdi-comparator/role';
+const NOMBRE_CLAIM = 'https://cfdi-comparator/nombre';
 
 export interface AppUser {
   id:      string;
@@ -17,9 +19,9 @@ const GUEST: AppUser = { id: '', name: '', email: '', role: 'viewer', picture: n
 /**
  * AuthService — wrapper sobre @auth0/auth0-angular.
  *
- * Expone la misma interfaz que el stub de desarrollo para que el resto
- * de la app no necesite cambios: isAuthenticated, isLoading, currentUser,
- * login(), logout(), hasRole(), getAccessToken().
+ * Tras autenticarse, consulta GET /api/users/me para obtener el rol real
+ * almacenado en la base de datos. Expone roleLoaded$ para que los guards
+ * esperen a tener el rol antes de decidir el acceso.
  */
 @Injectable({ providedIn: 'root' })
 export class AuthService {
@@ -28,26 +30,58 @@ export class AuthService {
   private _isLoading = true;
   private _user: AppUser = GUEST;
 
-  readonly isAuthenticated$: Observable<boolean>;
-  readonly isLoading$: Observable<boolean>;
+  private _roleLoaded = new BehaviorSubject<boolean>(false);
 
-  constructor(private auth0: Auth0Service) {
+  readonly isAuthenticated$: Observable<boolean>;
+  readonly isLoading$:       Observable<boolean>;
+  readonly roleLoaded$:      Observable<boolean> = this._roleLoaded.asObservable();
+
+  constructor(private auth0: Auth0Service, private http: HttpClient) {
     this.isAuthenticated$ = this.auth0.isAuthenticated$;
     this.isLoading$       = this.auth0.isLoading$;
 
-    this.auth0.isAuthenticated$.subscribe(v => (this._isAuth    = v));
-    this.auth0.isLoading$.subscribe(v       => (this._isLoading = v));
-    this.auth0.user$.subscribe(u            => (this._user = u ? this.mapUser(u) : GUEST));
+    this.auth0.isLoading$.subscribe(v => (this._isLoading = v));
+
+    this.auth0.user$.subscribe(u => {
+      this._user = u ? this.mapUser(u) : GUEST;
+    });
+
+    this.auth0.isAuthenticated$.subscribe(authenticated => {
+      this._isAuth = authenticated;
+      if (authenticated) {
+        this.loadDbRole();
+      } else {
+        this._user = GUEST;
+        this._roleLoaded.next(false);
+      }
+    });
   }
 
   private mapUser(u: User): AppUser {
     return {
-      id:      u.sub      ?? '',
-      name:    u.name     ?? u.nickname ?? '',
-      email:   u.email    ?? '',
-      role:    (u[ROLE_CLAIM] as string) ?? 'viewer',
-      picture: u.picture  ?? null,
+      id:      u.sub ?? '',
+      name:    (u[NOMBRE_CLAIM] as string) || u.nickname || '',
+      email:   u.email ?? '',
+      role:    'viewer',   // rol provisional; se sobreescribe con loadDbRole()
+      picture: u.picture ?? null,
     };
+  }
+
+  private loadDbRole(): void {
+    this.http.get<{ role: string; nombre: string }>(`${environment.apiUrl}/users/me`).subscribe({
+      next: (data) => {
+        this._user = {
+          ...this._user,
+          role:  data.role,
+          name:  data.nombre || this._user.name,
+        };
+        this._roleLoaded.next(true);
+      },
+      error: () => {
+        // Si falla la carga del rol, no bloquear la app — queda como viewer
+        this._roleLoaded.next(true);
+      },
+    });
   }
 
   get isLoading():       boolean  { return this._isLoading; }

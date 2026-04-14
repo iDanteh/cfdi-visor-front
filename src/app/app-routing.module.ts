@@ -1,6 +1,7 @@
 import { NgModule }     from '@angular/core';
 import { RouterModule, Routes } from '@angular/router';
 import { AuthGuard }    from './core/guards/auth.guard';
+import { RoleGuard }    from './core/guards/role.guard';
 import { LoginComponent } from './features/login/login.component';
 
 const routes: Routes = [
@@ -23,6 +24,12 @@ const routes: Routes = [
     path: 'collection-requests',
     canActivate: [AuthGuard],
     loadChildren: () => import('./features/collection-requests/collection-request.module').then(m => m.CollectionRequestModule),
+  },
+  {
+    path: 'users',
+    canActivate: [AuthGuard, RoleGuard],
+    data: { roles: ['admin'] },
+    loadChildren: () => import('./features/users/users.module').then(m => m.UsersModule),
   },
   { path: '**', redirectTo: '/banks' },
 ];
