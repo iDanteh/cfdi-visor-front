@@ -41,12 +41,14 @@
             <span *ngIf="!sidebarCollapsed">Solicitudes de Cobro</span>
           </a>
 
-          <div *ngIf="!sidebarCollapsed" class="sidebar-section">Contabilidad</div>
-          <a routerLink="/account-plan" routerLinkActive="active"
-             [title]="sidebarCollapsed ? 'Catálogo de Cuentas' : ''">
-            <span class="sidebar-icon">📒</span>
-            <span *ngIf="!sidebarCollapsed">Catálogo de Cuentas</span>
-          </a>
+          <ng-container *ngIf="auth.hasRole('admin') || auth.hasRole('contador') || auth.hasRole('viewer')">
+            <div *ngIf="!sidebarCollapsed" class="sidebar-section">Contabilidad</div>
+            <a routerLink="/account-plan" routerLinkActive="active"
+              [title]="sidebarCollapsed ? 'Catálogo de Cuentas' : ''">
+              <span class="sidebar-icon">📒</span>
+              <span *ngIf="!sidebarCollapsed">Catálogo de Cuentas</span>
+            </a>
+          </ng-container>
 
           <ng-container *ngIf="auth.hasRole('admin')">
             <div *ngIf="!sidebarCollapsed" class="sidebar-section">Administración</div>
