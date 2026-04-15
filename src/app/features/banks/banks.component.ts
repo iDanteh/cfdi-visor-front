@@ -4,9 +4,10 @@ import { merge, Subject } from 'rxjs';
 import { debounceTime, distinctUntilChanged, switchMap, takeUntil } from 'rxjs/operators';
 import {
   BankService, BankMovement, BankCard, BankFilter, BankStatus, ErpCxC, ErpLink,
-  BankRule, BankRuleCondicion, RuleCampo, RuleOperador,
+  BankRule, BankRuleCondicion, RuleCampo, RuleOperador, IndividualMovResult,
 } from '../../core/services/bank.service';
 import { AuthService } from '../../core/services/auth.service';
+import { SocketService, BankImportProgressEvent } from '../../core/services/socket.service';
 
 type ViewMode  = 'cards' | 'detail';
 type SortDir   = 'asc' | 'desc';
@@ -49,13 +50,28 @@ export class BanksComponent implements OnInit, OnDestroy {
   auxError: string | null = null;
 
   // ── Modal de importación ────────────────────────────────────────────────────
-  showImportModal = false;
-  importBanco     = '';
+  showImportModal  = false;
+  importTab: 'excel' | 'individual' = 'excel';
+  importBanco      = '';
   selectedFile: File | null = null;
-  uploading       = false;
-  isDragging      = false;
-  uploadResult:   { importados: number; duplicados: number; resumen: Record<string, number> } | null = null;
-  uploadError:    string | null = null;
+  uploading        = false;
+  isDragging       = false;
+  uploadResult:    { importados: number; duplicados: number; resumen: Record<string, number> } | null = null;
+  uploadError:     string | null = null;
+  importProgress:  BankImportProgressEvent | null = null;
+
+  // ── Registro individual ─────────────────────────────────────────────────────
+  indBanco      = '';
+  indFecha      = '';
+  indConcepto   = '';
+  indDeposito:  number | null = null;
+  indRetiro:    number | null = null;
+  indSaldo:     number | null = null;
+  indRefNum     = '';
+  indNumAut     = '';
+  submittingInd = false;
+  indResult:    IndividualMovResult | null = null;
+  indError:     string | null = null;
 
   // ── Match ERP ───────────────────────────────────────────────────────────────
   matchingErp        = false;
@@ -164,6 +180,10 @@ export class BanksComponent implements OnInit, OnDestroy {
   applyRulesResult: { actualizados: number; sinCambio: number } | null = null;
   applyRulesError:  string | null = null;
 
+  // ── Confirmación eliminar regla ───────────────────────────────────────────
+  showDeleteRuleModal = false;
+  ruleToDelete: BankRule | null = null;
+
   // Formulario de regla (crear / editar)
   showRuleForm   = false;
   editingRuleId: string | null = null;
@@ -255,7 +275,7 @@ export class BanksComponent implements OnInit, OnDestroy {
   private loadTrigger$   = new Subject<BankFilter>();
   private conceptoFilter$ = new Subject<string>();
 
-  constructor(private bankService: BankService, private fb: FormBuilder, public auth: AuthService) {
+  constructor(private bankService: BankService, private fb: FormBuilder, public auth: AuthService, private socketService: SocketService) {
     this.filterForm = this.fb.group({
       search:      [''],
       tipo:        [''],
@@ -300,7 +320,6 @@ export class BanksComponent implements OnInit, OnDestroy {
       takeUntil(this.destroy$),
     ).subscribe(() => this.loadMovements(1));
 
-
     merge(
       this.filterForm.get('tipo')!.valueChanges,
       this.filterForm.get('fechaInicio')!.valueChanges,
@@ -310,6 +329,23 @@ export class BanksComponent implements OnInit, OnDestroy {
       takeUntil(this.destroy$),
     ).subscribe(() => this.loadMovements(1));
 
+    // ── Sockets: actualizaciones en tiempo real ──────────────────────────────
+    this.socketService.movementUpdated$.pipe(takeUntil(this.destroy$)).subscribe(updated => {
+      const idx = this.movements.findIndex(m => m._id === updated._id);
+      if (idx !== -1) {
+        this.movements[idx] = { ...this.movements[idx], ...updated } as BankMovement;
+        this.movements = [...this.movements];
+      }
+    });
+
+    this.socketService.erpMatchDone$.pipe(takeUntil(this.destroy$)).subscribe(() => {
+      this.loadCards();
+      if (this.view === 'detail') this.loadMovements(this.pagination.page);
+    });
+
+    this.socketService.importProgress$.pipe(takeUntil(this.destroy$)).subscribe(progress => {
+      this.importProgress = progress;
+    });
   }
 
   ngOnDestroy(): void {
@@ -320,6 +356,9 @@ export class BanksComponent implements OnInit, OnDestroy {
   // ── Navegación ──────────────────────────────────────────────────────────────
 
   openBank(banco: string): void {
+    if (this.activeBanco && this.activeBanco !== banco) {
+      this.socketService.leaveBanco(this.activeBanco);
+    }
     this.activeBanco        = banco;
     this.view               = 'detail';
     this.activeStatus       = '';
@@ -330,10 +369,12 @@ export class BanksComponent implements OnInit, OnDestroy {
     this.showCategoriaFilter = false;
     this.showRulesPanel      = false;
     this.filterForm.reset({ search: '', tipo: '', fechaInicio: '', fechaFin: '' });
+    this.socketService.joinBanco(banco);
     this.loadMovements(1);
   }
 
   goBack(): void {
+    if (this.activeBanco) this.socketService.leaveBanco(this.activeBanco);
     this.view        = 'cards';
     this.activeBanco = null;
     this.movements   = [];
@@ -476,15 +517,61 @@ export class BanksComponent implements OnInit, OnDestroy {
   // ── Modal de importación ────────────────────────────────────────────────────
 
   openImportModal(): void {
+    this.importTab    = 'excel';
     this.importBanco  = this.activeBanco || '';
     this.selectedFile = null;
     this.uploadResult = null;
     this.uploadError  = null;
+    this.indBanco     = this.activeBanco || '';
+    this.indFecha     = new Date().toISOString().split('T')[0];
+    this.indConcepto  = '';
+    this.indDeposito  = null;
+    this.indRetiro    = null;
+    this.indSaldo     = null;
+    this.indRefNum    = '';
+    this.indNumAut    = '';
+    this.indResult    = null;
+    this.indError     = null;
     this.showImportModal = true;
   }
 
   closeImportModal(): void {
     this.showImportModal = false;
+  }
+
+  submitIndividual(): void {
+    if (this.submittingInd) return;
+    this.submittingInd = true;
+    this.indResult     = null;
+    this.indError      = null;
+
+    this.bankService.importIndividual({
+      banco:              this.indBanco,
+      fecha:              this.indFecha,
+      concepto:           this.indConcepto || undefined,
+      deposito:           this.indDeposito,
+      retiro:             this.indRetiro,
+      saldo:              this.indSaldo,
+      referenciaNumerica: this.indRefNum   || null,
+      numeroAutorizacion: this.indNumAut   || null,
+    }).subscribe({
+      next: (res) => {
+        this.indResult     = res;
+        this.submittingInd = false;
+        this.indConcepto   = '';
+        this.indDeposito   = null;
+        this.indRetiro     = null;
+        this.indSaldo      = null;
+        this.indRefNum     = '';
+        this.indNumAut     = '';
+        this.loadCards();
+        if (this.view === 'detail') this.loadMovements(1);
+      },
+      error: (err) => {
+        this.indError      = err?.error?.error || 'Error al registrar el movimiento';
+        this.submittingInd = false;
+      },
+    });
   }
 
   onFileSelected(event: Event): void {
@@ -510,20 +597,23 @@ export class BanksComponent implements OnInit, OnDestroy {
 
   uploadExcel(): void {
     if (!this.selectedFile || this.uploading) return;
-    this.uploading   = true;
-    this.uploadError = null;
+    this.uploading      = true;
+    this.uploadError    = null;
+    this.importProgress = null;
 
     this.bankService.upload(this.selectedFile, this.importBanco || undefined).subscribe({
       next: (res) => {
-        this.uploadResult = res as any;
-        this.uploading    = false;
-        this.selectedFile = null;
+        this.uploadResult   = res as any;
+        this.uploading      = false;
+        this.importProgress = null;
+        this.selectedFile   = null;
         this.loadCards();
         if (this.view === 'detail') this.loadMovements(1);
       },
       error: (err) => {
-        this.uploadError = err?.error?.error || 'Error al procesar el archivo';
-        this.uploading   = false;
+        this.uploadError    = err?.error?.error || 'Error al procesar el archivo';
+        this.uploading      = false;
+        this.importProgress = null;
       },
     });
   }
@@ -862,9 +952,21 @@ export class BanksComponent implements OnInit, OnDestroy {
     });
   }
 
-  deleteRule(rule: BankRule): void {
-    if (!confirm(`¿Eliminar la regla "${rule.nombre}"?`)) return;
-    this.bankService.deleteRule(rule._id).pipe(takeUntil(this.destroy$)).subscribe({
+  openDeleteRuleModal(rule: BankRule): void {
+    this.ruleToDelete       = rule;
+    this.showDeleteRuleModal = true;
+  }
+
+  closeDeleteRuleModal(): void {
+    this.showDeleteRuleModal = false;
+    this.ruleToDelete       = null;
+  }
+
+  confirmDeleteRule(): void {
+    if (!this.ruleToDelete) return;
+    const id = this.ruleToDelete._id;
+    this.closeDeleteRuleModal();
+    this.bankService.deleteRule(id).pipe(takeUntil(this.destroy$)).subscribe({
       next: () => this.loadRules(),
     });
   }

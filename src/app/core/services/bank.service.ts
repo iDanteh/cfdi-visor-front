@@ -137,12 +137,33 @@ export interface UploadResult {
   erroresHojas: { hoja: string; error: string }[];
 }
 
+export interface IndividualMovInput {
+  banco:              string;
+  fecha:              string;   // ISO date string
+  concepto?:          string;
+  deposito?:          number | null;
+  retiro?:            number | null;
+  saldo?:             number | null;
+  numeroAutorizacion?: string | null;
+  referenciaNumerica?: string | null;
+}
+
+export interface IndividualMovResult {
+  message:     string;
+  movimiento:  BankMovement;
+  categorizado: boolean;
+}
+
 @Injectable({ providedIn: 'root' })
 export class BankService {
   constructor(private api: ApiService) {}
 
   cards(): Observable<BankCard[]> {
     return this.api.get('/banks/cards');
+  }
+
+  importIndividual(data: IndividualMovInput): Observable<IndividualMovResult> {
+    return this.api.post('/banks/import-individual', { movimiento: data, banco: data.banco });
   }
 
   upload(file: File, banco?: string): Observable<UploadResult> {
